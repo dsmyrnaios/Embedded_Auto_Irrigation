@@ -22,6 +22,7 @@ struct measuringWateringFlags {
   uint32_t zbAddress;
   boolean irrigation;
   boolean measurement;
+  boolean startIrrigationFlag = false;
   int fromHour;
   int fromminute;
   int untilHour;
@@ -73,8 +74,8 @@ const unsigned long HTTP_TIMEOUT = 10000;  // max respone time from server
 const size_t MAX_CONTENT_SIZE    = 512;    // max size of the HTTP response
 const int MAX_DEVICES_INPUT      = 10;     //max size for enddevices
 const int ARRAYSIZE = 4;
-const long wateringInterval = 300000;      // interval at which to water (milliseconds)
-const long measuringInterval = 600000;     // interval at which to water (milliseconds)
+const long wateringInterval = 120000;      // interval at which to water (milliseconds)
+
 
 
 //////////////////////--------------- APN information obrained from your network provider------------------//////////////////////
