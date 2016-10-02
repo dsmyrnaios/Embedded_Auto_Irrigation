@@ -85,7 +85,10 @@ void setup() {
     }
     else {
       Serial.println(F("Not connected"));
-      delay(1000);
+      unsigned long currentMillis = millis();
+      if (currentMillis - previousMillis >= 1000) {  //delay(1000);
+        previousMillis = currentMillis;
+      }
     }
   }
 
@@ -96,15 +99,15 @@ void setup() {
   //Try to connect to Server
   //Timeout connection for server 30sec
   int timeout = 30000;
-  int currentTime = millis();      
+  int currentTime = millis();
 
-  while (true) 
+  while (true)
   {
     client.stop();
-    if (connect()) 
+    if (connect())
     {
-      const char* resource = "/embedded/setup?identifier=40E7CC41"; 
-      //Send request and skipHeaders for parsing the response            
+      const char* resource = "/embedded/setup?identifier=40E7CC41";
+      //Send request and skipHeaders for parsing the response
       if ((millis() - currentTime) >= timeout) {
         connectServerError = true;
         break;
@@ -135,81 +138,91 @@ void setup() {
       break;
     }
   }
-  
-  for(int i=0; i < devicesNum; i++){        
-     enddevices[i].measureflag = false;
-     enddevices[i].wateringflag = false;
-     if(minpinNumber + i > maxpinNumber){
-        return;
-     }     
-     enddevices[i].valvePin = minpinNumber + i;     
+
+  for (int i = 0; i < devicesNum; i++) {
+    enddevices[i].measureflag = false;
+    enddevices[i].wateringflag = false;
+    if (minpinNumber + i > maxpinNumber) {
+      return;
+    }
+    enddevices[i].valvePin = minpinNumber + i;
   }
-        
+
 }
 
 
 void loop() {
   Alarm.delay(1000);
   printTime();
-  
+
 
   unsigned long currentMillis = millis();
-  if (checkAutomaticWaterTime() && (currentMillis - previousMillis >= wateringInterval)) {  
-    previousMillis = currentMillis;  
-    if (client.connect(gsmData.server, gsmData.port)) {
-      const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41"; 
-      sendRequest(resource);
-      if (skipResponseHeaders())
-      {
-        char response[MAX_CONTENT_SIZE];
-        readReponseContent(response, sizeof(response));
+  if (checkAutomaticWaterTime()) {
+    if (currentMillis - previousMillis >= wateringInterval) {
+      //get request from server per 5minutes
+      previousMillis = currentMillis;
+      if (client.connect(gsmData.server, gsmData.port)) {
+        const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41";
+        sendRequest(resource);
+        if (skipResponseHeaders())
+        {
+          char response[MAX_CONTENT_SIZE];
+          readReponseContent(response, sizeof(response));
+          if (parseEndDevicesData(response)) {
+            if (deviceFlags[0].measurement) {
+              for (int i = 0; i < devicesNum; i++) {
+                DeviceStart(enddevices[i].zigbeeaddress, i);
+              }
+              sendMeasuresToServer();
+            }
 
-        if (parseEndDevicesData(response)) {
-          if(deviceFlags[0].measurement == true){
-            WakeUpAndTakeMeasures();
+            client.stop();
+            Serial.println(F("Disconnect"));
           }
-
-        for(int i =0; i < devicesNum; i++){    
-          if(deviceFlags[i].irrigation == true){
-            //TODO check the time and start irrrigation
-            
-          }
-        }
-          
-          client.stop();
-          Serial.println(F("Disconnect"));          
         }
       }
     }
-    //get request from server per 5minutes
-    /////////////    check Measurement Irrigation Flags from Server //////////////////////////////////////               
-   
-  } else {
-    for(int i =0; i < devicesNum; i++) {
-      if(enddevices[i].wateringflag == true){
-        digitalWrite(enddevices[i].valvePin, HIGH);        
-      } else {
-          digitalWrite(enddevices[i].valvePin, LOW);        
-      }      
-    } 
 
+    /////////////    check Measurement Irrigation Flags from Server //////////////////////////////////////
+    for (int i = 0; i < devicesNum; i++) {
+      if (deviceFlags[i].irrigation) {
+        //TODO check the time and start irrrigation
+        if (hour() > deviceFlags[i].untilHour || (hour() == deviceFlags[i].untilHour && minute() >= deviceFlags[i].untilMinute) ) {
+          Serial.println("END THE IRRIGATION NOW!!!");
+          deviceFlags[i].startIrrigationFlag = false;
+          continue;
+        }
+
+        if (hour() > deviceFlags[i].fromHour || (hour() == deviceFlags[i].fromHour && minute() >= deviceFlags[i].fromminute) ) {
+          Serial.println("START THE IRRIGATION NOW!!!");
+          deviceFlags[i].startIrrigationFlag = true;
+        }
+      }
+    }
+
+  } else {
+    for (int i = 0; i < devicesNum; i++) {
+      if (enddevices[i].wateringflag == true) {
+        digitalWrite(enddevices[i].valvePin, HIGH);
+      } else {
+        digitalWrite(enddevices[i].valvePin, LOW);
+      }
+    }
   }
 
-  
-    
 }
 
 
 
-boolean checkAutomaticWaterTime(){
-  int alarmfromminutes = alarmData.frHours*60 + alarmData.frMinutes;
-  int alarmtominutes = alarmData.toHours*60 + alarmData.toMinutes;
-  int nowTotalminutes = hour()*60 + minute();  
-  
+boolean checkAutomaticWaterTime() {
+  int alarmfromminutes = alarmData.frHours * 60 + alarmData.frMinutes;
+  int alarmtominutes = alarmData.toHours * 60 + alarmData.toMinutes;
+  int nowTotalminutes = hour() * 60 + minute();
+
   if ( (alarmfromminutes - nowTotalminutes > 0) || (alarmtominutes - nowTotalminutes < 0)) {
     return true;
   }
-    
+
   return false;
 }
 
@@ -264,7 +277,7 @@ void sendRequest(const char* resource) {
   client.println(" HTTP/1.1");
   client.println("Host: 78.46.70.93");
   client.println("Connection: close");
-  client.println();    
+  client.println();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -304,19 +317,19 @@ bool parseEndDevicesData(char* content) {
 
   root.prettyPrintTo(Serial);
 
-  for(int i =0; i < devicesNum; i++) {    
+  for (int i = 0; i < devicesNum; i++) {
     const char* identifier = root[i]["id"];
     deviceFlags[i].zbAddress = strtoul(identifier, NULL, 16);
     deviceFlags[i].irrigation = root[i]["irrig"];
     deviceFlags[i].measurement = root[i]["meas"];
     deviceFlags[i].fromHour = root[i]["frh"];
     deviceFlags[i].fromminute = root[i]["frm"];
-    deviceFlags[i].untilHour = root[i]["tom"];
-    deviceFlags[i].untilMinute = root[i]["toh"];
+    deviceFlags[i].untilHour = root[i]["toh"];
+    deviceFlags[i].untilMinute = root[i]["tom"];
   }
 
-  
-  
+  return true;
+
 
 }
 
@@ -325,7 +338,7 @@ bool parseEndDevicesData(char* content) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////   Parse setup data from Json to STRUCT    /////////////////////////////////////////////////////////////////////////////////
-bool parseSetupData(char* content, struct AlarmData* alarmData) {
+bool parseSetupData(char* content, struct AlarmData * alarmData) {
   // Compute optimal size of the JSON buffer according to what we need to parse.
   // This is only required if you use StaticJsonBuffer.
   //const size_t BUFFER_SIZE = JSON_OBJECT_SIZE(6);
@@ -343,7 +356,7 @@ bool parseSetupData(char* content, struct AlarmData* alarmData) {
 
   root.prettyPrintTo(Serial);
 
-   //TODO must change for enddevices
+  //TODO must change for enddevices
   // Here were copy the strings we're interested in
   alarmData->frHours    = root["fh"];
   alarmData->frMinutes  = root["fm"];
@@ -351,36 +364,36 @@ bool parseSetupData(char* content, struct AlarmData* alarmData) {
   alarmData->toMinutes  = root["tm"];
   devicesNum = root["num"];
 
-  JARRAY_BUFFER_SIZE = devicesNum*300;
+  JARRAY_BUFFER_SIZE = devicesNum * 300;
   JSON_BUFFER_SIZE = JARRAY_BUFFER_SIZE + 20;
-  
+
   Serial.print(F("devicesNum = "));
   Serial.println(devicesNum);
 
   //struct endDevice enddevices[devicesNum];
- 
-  for(int i =0; i < devicesNum; i++){
-    const char* idenntifier = root["devices"][i]["id"];  
+
+  for (int i = 0; i < devicesNum; i++) {
+    const char* idenntifier = root["devices"][i]["id"];
     //enddevices[i].zigbeeCharAddress = strdup(idenntifier);
     enddevices[i].zigbeeaddress = strtoul(idenntifier, NULL, 16);
-    
+
     enddevices[i].minhumidity = root["devices"][i]["minh"];
     enddevices[i].maxhumidity = root["devices"][i]["maxh"];
     enddevices[i].mintemp = root["devices"][i]["mint"];
     enddevices[i].maxtemp = root["devices"][i]["maxt"];
     enddevices[i].measureflag = false;
     enddevices[i].wateringflag = false;
-    enddevices[i].valvePin = minpinNumber + i; 
+    enddevices[i].valvePin = minpinNumber + i;
 
     ///////////////////////   SOLENOID OUTPUT PINS    ///////////////////////
-    pinMode(minpinNumber + i, OUTPUT);        
+    pinMode(minpinNumber + i, OUTPUT);
   }
- 
+
   return true;
 }
 
 ///////////////////////////////////////////////////            Print the data extracted from the JSON   //////////////////////////////////////////////////////////
-void printUserData(const struct AlarmData* alarmData) {
+void printUserData(const struct AlarmData * alarmData) {
   Serial.print(F("FROM Hours = "));
   Serial.println(alarmData->frHours);
   Serial.print(F("FROM Minutes = "));
@@ -395,33 +408,71 @@ void printUserData(const struct AlarmData* alarmData) {
 void WakeUpAndTakeMeasures() {
   printDateTime();
   Serial.println("..........Wake Up End Devices And Take Measures..........");
+  boolean chk = false;
+  //TODO compare with humidity and temperature min and max
+  int frHours = 0;
+  int frMinutes = 0;
 
-  for(int i=0; i < devicesNum; i++){        
+  for (int i = 0; i < devicesNum; i++) {
     //Set watering flag
     if (DeviceStart(enddevices[i].zigbeeaddress, i)) {
-       enddevices[i].wateringflag = true;
+      enddevices[i].wateringflag = true;
+      chk = true;
     } else {
       enddevices[i].wateringflag = false;
     }
 
-     unsigned long kathisterisi = millis();
-     while (millis() - kathisterisi < 8000) {
-        //do nothing
-     }            
+    unsigned long kathisterisi = millis();
+    while (millis() - kathisterisi < 8000) {
+      //do nothing
+    }
   }
 
-  /////////  TO DO ----   CHANGE TO DYNAMIC BUFFER -----------------------  
+  if (chk) {
+    if (minute() >= 50) {
+      frMinutes = minute() % 50;
+      frHours = addhours(1);
+    } else {
+      frMinutes = minute() + 2;
+      frHours = hour();
+    }
+    Serial.print("FROM HOURS :");
+    Serial.println(frHours);
+    Serial.print("FROM MINUTES : ");
+    Serial.println(frMinutes);
+
+    onAlarm = Alarm.alarmOnce(frHours, frMinutes, 30, WakeUpAndTakeMeasures);
+  } else {
+    frHours = addhours(2);
+    frMinutes = minute();
+
+    //checkIrrigationUntilTime(frHours, frMinutes) ? Alarm.alarmOnce(alarmData.frHours,alarmData.frMinutes, 0, WakeUpAndTakeMeasures) : Alarm.alarmOnce(frHours,frMinutes, 0, WakeUpAndTakeMeasures);
+
+    if (checkIrrigationUntilTime(frHours, frMinutes)) {
+      onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
+    } else {
+      onAlarm = Alarm.alarmOnce(frHours, frMinutes, 0, WakeUpAndTakeMeasures);
+    }
+  }
+
+  sendMeasuresToServer();
+
+}
+
+
+void sendMeasuresToServer() {
+  /////////  TO DO ----   CHANGE TO DYNAMIC BUFFER -----------------------
   DynamicJsonBuffer jsonBuffer(JSON_BUFFER_SIZE);
   DynamicJsonBuffer jsonBufferNes(JARRAY_BUFFER_SIZE);
-  
-  //StaticJsonBuffer<JSON_BUFFER_SIZE> jsonBuffer;  
+
+  //StaticJsonBuffer<JSON_BUFFER_SIZE> jsonBuffer;
   //StaticJsonBuffer<JARRAY_BUFFER_SIZE> jsonBufferNes;
-  
+
   JsonObject& root = jsonBuffer.createObject();
   JsonArray& endDevices = root.createNestedArray("emList");
-  
-  for(int i=0; i < devicesNum; i++){    
-    //TODO change from 3 to size of end devices count  
+
+  for (int i = 0; i < devicesNum; i++) {
+    //TODO change from 3 to size of end devices count
     for (int j = 0; j < ARRAYSIZE; j++)
     {
       JsonObject& nestedroot =  jsonBufferNes.createObject();
@@ -429,7 +480,7 @@ void WakeUpAndTakeMeasures() {
       nestedroot["dt"] = records[i].Dtime;
       nestedroot["zb"] = records[i].zbaddress;
       //nestedroot["observableProperty"] = results[j];
-      
+
       if (j == 0) {           //humidity
         nestedroot["mv"] =  records[i].Shumidity;
         nestedroot["oid"] =  1;
@@ -448,13 +499,13 @@ void WakeUpAndTakeMeasures() {
         nestedroot["uid"] = 21;
       }
       endDevices.add(nestedroot);
-    }  
+    }
   }
-  
-  root.prettyPrintTo(Serial); 
+
+  root.prettyPrintTo(Serial);
   if (client.connect(gsmData.server, gsmData.port)) {
     Serial.println(F("connected...Sending Post..."));
-    
+
     client.println("POST /FarmCloud/embedded/savemeasures/ HTTP/1.0");
     client.println("Host: 78.46.70.93");
     client.println("User-Agent: Arduino/1.0");
@@ -470,22 +521,24 @@ void WakeUpAndTakeMeasures() {
   }
 
   Serial.println(F("Disconnect"));
-  client.stop();    
-}
+  client.stop();
 
+}
 
 /////////////////////////  Start End Device Process  //////////////////////////////////////////////////
 boolean DeviceStart(uint32_t destAddress, int counter) {
   Serial.print(F("Starting End Device Process: "));
   Serial.println(destAddress, HEX);
-  
+
   //TODO must change to char*;
   String sensorsData;
   sensorsData.reserve(25);
   unsigned long previousMillis = millis();
 
-  if(WakeUpEndDevice(destAddress)){
-    while (millis() - previousMillis < 5000) {/*wait for 5sec*/} 
+  if (WakeUpEndDevice(destAddress)) {
+    while (millis() - previousMillis < 5000) {
+      /*wait for 5sec*/
+    }
     Serial.println(F("Reading End Device Sensor Data..."));
     sensorsData = ReadEndDeviceData();
 
@@ -496,14 +549,14 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
       return false;
     } else if (sensorsData == "O") {
       return false;
-    } else { //We have sample Ladies      
+    } else { //We have sample Ladies
 
       float humidity, itemp, wtemp;
       int soil;
 
       //char buf[30];
       //sensorsData.toCharArray(buf, sensorsData.length() + 1);
-      
+
       //sscanf(buf, "%f,%f,%f,%d", humidity, itemp, wtemp, soil);
       splitMeasures(sensorsData);
       humidity = measuresValues[0];
@@ -524,7 +577,7 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
       Serial.print(F("WaterProof Temp :"));
       Serial.println(wtemp);
       Serial.print(F("SOIL :"));
-      Serial.println(soil);      
+      Serial.println(soil);
 
       //TODO all string must change to char array
       String minutestr;
@@ -535,9 +588,9 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
       String dtime;
       dtime.reserve(19);
       dtime = String(String(year()) + "-" + String(month()) + "-" + String(day()) + " " + String(hour()) + ":" + minutestr + ":00");
-      
+
       records[counter].Dtime = dtime;
-      
+
       String strAddr(destAddress, HEX);
       strAddr.toUpperCase(); //TODO change on server
       records[counter].zbaddress = strAddr;
@@ -552,52 +605,27 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
       //Serial.println(records[counter].zbaddress, HEX);
       Serial.println(F("End Parse Data"));
 
-      //TODO compare with humidity and temperature min and max
-      int frHours = 0;
-      int frMinutes = 0;
-      
+
+
       if (wtemp > enddevices[counter].maxtemp && soil < enddevices[counter].minhumidity) {
         Serial.println(F("Start watering: true"));
-        
-        if(minute() >= 50){
-          frMinutes = minute()%50;
-          frHours = addhours(1);
-        } else {
-          frMinutes = minute() + 10;
-          frHours = hour();
-        }
-        
-        onAlarm = Alarm.alarmOnce(frHours, frMinutes, 0, WakeUpAndTakeMeasures);
         return true;
       }
-      
-      frHours = addhours(2);
-      frMinutes = minute();
-
-//      checkIrrigationUntilTime(frHours, frMinutes) ? Alarm.alarmOnce(alarmData.frHours,alarmData.frMinutes, 0, WakeUpAndTakeMeasures) : Alarm.alarmOnce(frHours,frMinutes, 0, WakeUpAndTakeMeasures);
-      
-      if(checkIrrigationUntilTime(frhours, frMinutes)){
-         Alarm.alarmOnce(alarmData.frHours,alarmData.frMinutes, 0, WakeUpAndTakeMeasures)
-      } else {
-        Alarm.alarmOnce(frHours,frMinutes, 0, WakeUpAndTakeMeasures);
-      }
-
-          
       return false;
     }
   } else {
     sensorsData = "EF";
-    Serial.println(F("EF"));    
+    Serial.println(F("EF"));
     return false;
   }
 }
 
 boolean checkIrrigationUntilTime(int frHours, int frMinutes)
 {
-  int alarmTotalMinues = alarmData.toHours*60 + alarmData.toMinutes;
-  int nextTotalMinutes = frHours*60 + frMinutes;
+  int alarmTotalMinues = alarmData.toHours * 60 + alarmData.toMinutes;
+  int nextTotalMinutes = frHours * 60 + frMinutes;
 
-  if(nextTotalMinutes >= alarmTotalMinues){
+  if (nextTotalMinutes >= alarmTotalMinues) {
     return true;
   }
   return false;
@@ -605,8 +633,8 @@ boolean checkIrrigationUntilTime(int frHours, int frMinutes)
 
 int addhours(int hours)
 {
-  int nexthour = hour() + hours;  
-  if(hour() > 23){
+  int nexthour = hour() + hours;
+  if (hour() > 23) {
     nexthour = hour() - 24; //22, 23
   }
   return nexthour;
@@ -635,12 +663,12 @@ boolean WakeUpEndDevice(uint32_t DestAddress) {
   // wait up to half second for the status response
   if (xbee.readPacket(500)) {
     // got a response!
-//     Serial.print(" ApiID:");
-//     Serial.println(xbee.getResponse().getApiId());
+    //     Serial.print(" ApiID:");
+    //     Serial.println(xbee.getResponse().getApiId());
     // should be a znet tx status
     if (xbee.getResponse().getApiId() == ZB_TX_STATUS_RESPONSE) {
-//          Serial.print("ZB_TX_STATUS_RESPONSE ApiID:");
-//          Serial.println(xbee.getResponse().getApiId());
+      //          Serial.print("ZB_TX_STATUS_RESPONSE ApiID:");
+      //          Serial.println(xbee.getResponse().getApiId());
       xbee.getResponse().getZBTxStatusResponse(txStatus);
 
       // get the delivery status, the fifth byte
@@ -651,7 +679,7 @@ boolean WakeUpEndDevice(uint32_t DestAddress) {
         //        Serial.print("Send packet data FOR WAKE UP: "); //360 sec
         //        Serial.print(currentMillis - previousMillis); //360 sec
         //        Serial.println(" msec"); //360 sec
-      } else {        
+      } else {
         // the remote XBee did not receive our packet. is it powered on?
         Serial.println(F("END DEVICE DID NOT GET THE MESSAGE"));
         return false;
@@ -704,7 +732,7 @@ String ReadEndDeviceData() {
       }
       for (int i = 0; i < rx.getDataLength(); i++) {
         sample += (char)rx.getData(i);
-      }      
+      }
       Serial.println(sample);
     } else if (xbee.getResponse().getApiId() == MODEM_STATUS_RESPONSE) {
       xbee.getResponse().getModemStatusResponse(msr);
@@ -758,26 +786,26 @@ void printTime()
   Serial.print(":");
   Serial.print(minute(), DEC);
   Serial.print(":");
-  Serial.println(second(), DEC);        
+  Serial.println(second(), DEC);
 }
 
 // Calculate based on max input size expected for one command
 #define INPUT_SIZE 30
-void splitMeasures(String input){  
+void splitMeasures(String input) {
   Serial.println(input);
-    
+
   char buf[INPUT_SIZE];
-  input.toCharArray(buf, input.length() + 1);  
-  char * pch;  
-  pch = strtok (buf,",");
+  input.toCharArray(buf, input.length() + 1);
+  char * pch;
+  pch = strtok (buf, ",");
   int counter = 0;
   while (pch != NULL)
   {
-    //Serial.println(pch);    
+    //Serial.println(pch);
     float f;
     f = (float)atof(pch);
     measuresValues[counter] = f;
-    pch = strtok (NULL, ",");    
+    pch = strtok (NULL, ",");
     counter++;
-  }    
+  }
 }
