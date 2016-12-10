@@ -1,4 +1,4 @@
-// The type of data that we want to extract from the page
+// Automated Algorithm Period-Time(Alarm Library)
 struct AlarmData {
   int frMinutes;
   int frHours;
@@ -6,7 +6,7 @@ struct AlarmData {
   int toHours;
 };
 
-/////////Send data post struct //////////////////////
+/////////End Devices Measurements Send To Server //////////////////////
 //////////////////////////////////////////////////////
 struct record_data {
   String Dtime;
@@ -17,7 +17,7 @@ struct record_data {
   int soilm;
 };
 
-
+// Struct stores USER Data Request TO Embeeded //////////
 struct measuringWateringFlags {
   uint32_t zbAddress;
   boolean irrigation;
@@ -44,6 +44,7 @@ struct GsmData {
 //  uint8_t  byte[4];
 //} address ;
 
+/// Struct for AUTOMATED ALGORITHM ///////
 struct endDevice {  
   uint32_t zigbeeaddress;
   //char* zigbeeCharAddress;
@@ -55,7 +56,7 @@ struct endDevice {
   boolean wateringflag;   
   boolean devflag;
   int valvePin;
-  char* Dtime;
+  char* Dtime[19];  
 };
 
 
@@ -72,11 +73,21 @@ const unsigned int minpinNumber  = 23;     // min valve pint for the end devices
 const unsigned int maxpinNumber  = 30;     // max valve pint for the end devices
 const unsigned long HTTP_TIMEOUT = 10000;  // max respone time from server
 const size_t MAX_CONTENT_SIZE    = 512;    // max size of the HTTP response
-const int MAX_DEVICES_INPUT      = 10;     //max size for enddevices
+const int MAX_DEVICES_INPUT      = 10;     // max size for enddevices
 const int ARRAYSIZE = 4;
-const long wateringInterval = 120000;      // interval at which to water (milliseconds)
+const long userRequestInterval          = 2*60*1000;    // interval getting data from user (milliseconds)
+const long userRequestAlgorithmInterval = 3*60*1000; // interval getting data for automatic algorithm (milliseconds)
 
+//////////////////////--------------- Keypad shield const values ------------------//////////////////////
+#define btnRIGHT  0
+#define btnUP     1
+#define btnDOWN   2
+#define btnLEFT   3
+#define btnSELECT 4
+#define btnNONE   5
 
+// select the pins used on the LCD panel
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 
 //////////////////////--------------- APN information obrained from your network provider------------------//////////////////////
 //#define PINNUMBER      "8492" //TODO on keypad
