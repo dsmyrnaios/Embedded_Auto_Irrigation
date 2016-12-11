@@ -30,7 +30,7 @@ struct measuringWateringFlags {
 };
 
 struct GsmData {
-  char* PINNUMBER      = (char*)"8492";                  //TODO on keypad
+  char* PINNUMBER      = (char*)"";                      //TODO on keypad 8492
   char* GPRS_APN       = (char*)"internet.vodafone.gr";  // replace with your GPRS APN
   char* GPRS_LOGIN     = (char*)"";                      // replace with your GPRS login
   char* GPRS_PASSWORD  = (char*)"";                      // replace with your GPRS password
@@ -75,8 +75,8 @@ const unsigned long HTTP_TIMEOUT = 10000;  // max respone time from server
 const size_t MAX_CONTENT_SIZE    = 512;    // max size of the HTTP response
 const int MAX_DEVICES_INPUT      = 10;     // max size for enddevices
 const int ARRAYSIZE = 4;
-const long userRequestInterval          = 2*60*1000;    // interval getting data from user (milliseconds)
-const long userRequestAlgorithmInterval = 3*60*1000; // interval getting data for automatic algorithm (milliseconds)
+const long userRequestInterval          = 300000;    // interval getting data from user 2 mins in milliseconds
+const long userRequestAlgorithmInterval = 120000; //43200000; // interval getting data for automatic algorithm 12 hours in milliseconds
 
 //////////////////////--------------- Keypad shield const values ------------------//////////////////////
 #define btnRIGHT  0
@@ -85,6 +85,9 @@ const long userRequestAlgorithmInterval = 3*60*1000; // interval getting data fo
 #define btnLEFT   3
 #define btnSELECT 4
 #define btnNONE   5
+
+int blinkX = 0;
+int blinkY = 0;
 
 // select the pins used on the LCD panel
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
