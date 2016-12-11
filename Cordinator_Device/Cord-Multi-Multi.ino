@@ -34,7 +34,7 @@ int JARRAY_BUFFER_SIZE, JSON_BUFFER_SIZE;
 
 /////////////////////////////////   Public variables    /////////////////////////////////
 //WATERING
-unsigned long previousMillis = 0;
+unsigned long previousMillis = 0, userRequestAlgorithmMillis = 0;
 
 struct endDevice enddevices[MAX_DEVICES_INPUT];
 struct record_data records[MAX_DEVICES_INPUT];
@@ -74,49 +74,101 @@ void setup() {
 
   ///////////////////////////////////////////   LCD SETUP   ///////////////////////////////////////////////
   lcd.begin(16, 2);              // start the library
-  lcd.setCursor(0,0);
+  lcd.setCursor(0, 0);
   lcd.print("Give pin number"); // print a simple message
 
-  while(true) {
+  while (true) {
     unsigned long currentTime = millis();
-      if (currentTime - previousMillis >= 5000) {  //delay(5000);
-        previousMillis = currentTime;
-        lcd.clear();
-        break;
-      }
+    if (currentTime - previousMillis >= 5000) {  //delay(5000);
+      previousMillis = currentTime;
+      lcd.clear();
+      break;
+    }
   }
 
-  lcd.setCursor(0,0);
+  lcd.setCursor(0, 0);
   lcd.print("0123456789"); // print a simple message
-  lcd.setCursor(0,1);
+  lcd.setCursor(0, 1);
   lcd.print("____"); // print a simple message
-  
+
   ///////////////////////////////////////////   GSM SETUP    ///////////////////////////////////////////////
 
   // Start GSM shield
   // If your SIM has PIN, pass it as a parameter of begin() in quotes
-  while (true)
-  {
-    if ((gsmAccess.begin(gsmData.PINNUMBER) == GSM_READY) & (gprs.attachGPRS(gsmData.GPRS_APN, gsmData.GPRS_LOGIN, gsmData.GPRS_PASSWORD) == GPRS_READY)) {
-      break;
-    }
-    else {
-      Serial.println(F("Not connected"));
-      unsigned long currentMillis = millis();
-      if (currentMillis - previousMillis >= 1000) {  //delay(1000);
-        previousMillis = currentMillis;
+
+  boolean checkWhile = true;
+  String PINNUMBER_LOCAL;
+  PINNUMBER_LOCAL.reserve(4);
+
+  while (true) {
+    while (checkWhile) {
+      lcd.setCursor(blinkX, 0);
+      lcd.blink();
+      int lcd_key = read_LCD_buttons();
+      if (lcd_key == btnRIGHT && blinkX<=9) {
+        delay(150);        
+        blinkX++;
+        lcd.setCursor(blinkX, 0);
+      }
+      else if (lcd_key == btnLEFT && blinkX >= 0) {
+        delay(150);        
+        blinkX--;
+        lcd.setCursor(blinkX, 0);
+      } else if (lcd_key == btnSELECT && blinkY <= 3) {
+        delay(200);
+        lcd.setCursor(blinkY, 1);
+        lcd.print(blinkX);
+        lcd.setCursor(blinkX, 0);
+        /////////////////////////// metatroph tou int se string kai meta se char /n the end of char array so b is 1+ /n
+        String c = (String)blinkX;
+        ///////////////////////////
+        //PINNUMBER_LOCAL[blinkY] = c;
+        PINNUMBER_LOCAL += c;
+        Serial.println(c);
+        blinkY++;
+      }
+
+      if (PINNUMBER_LOCAL[3] != (char)0) {        
+        checkWhile = false;
+        char buf[4];
+        PINNUMBER_LOCAL.toCharArray(buf, PINNUMBER_LOCAL.length() + 1);
+        //gsmData.PINNUMBER = (char*)buf;
+        gsmData.PINNUMBER = (char*)"8492";
+        Serial.println(gsmData.PINNUMBER);
+        Serial.println(F("PIN Initialized"));
       }
     }
+
+    if ((gsmAccess.begin(gsmData.PINNUMBER) == GSM_READY) & (gprs.attachGPRS(gsmData.GPRS_APN, gsmData.GPRS_LOGIN, gsmData.GPRS_PASSWORD) == GPRS_READY)) {
+        break;
+    } else if (gsmAccess.begin(gsmData.PINNUMBER) != GSM_READY) {
+      Serial.println("Wrong Password");
+      checkWhile = true;
+      for(int i=0; i < 4; i++){
+        lcd.setCursor(i,1);
+        lcd.print("_");        
+      }
+      blinkX = 0;
+      blinkY = 0;
+      PINNUMBER_LOCAL = "";     
+    } else{
+       Serial.println(F("Not connected"));
+        unsigned long currentMillis = millis();
+        if (currentMillis - previousMillis >= 1000) {  //delay(1000);
+          previousMillis = currentMillis;
+        }
+    }
+
   }
-
+  
   Serial.println(F("GSM initialized"));
-
+  
   /////////////////    GET ALARM DATA FROM SERVER   //////////////////////////////////
   //If you get a connection, report back via serial:
   //Try to connect to Server
   //Timeout connection for server 30sec
   int timeout = 30000;
-  int currentTime = millis();
+  unsigned long currentTime = millis();
 
   while (true)
   {
@@ -125,10 +177,13 @@ void setup() {
     {
       const char* resource = "/embedded/setup?identifier=40E7CC41";
       //Send request and skipHeaders for parsing the response
-      if ((millis() - currentTime) >= timeout) {        
+      Serial.println(millis() - currentTime);
+      if ((millis() - currentTime) >= timeout) {
+        //TODO set flag for sim not initialized
+        Serial.println("Im in");
         break;
       }
-
+      
       sendRequest(resource);
       if (skipResponseHeaders())
       {
@@ -149,7 +204,7 @@ void setup() {
     }
     else
     {
-      //TODO msg to lcd - connection on server failed      
+      //TODO msg to lcd - connection on server failed
       break;
     }
   }
@@ -161,8 +216,10 @@ void setup() {
       return;
     }
     enddevices[i].valvePin = minpinNumber + i;
-  } 
+  }
 
+  previousMillis = millis();
+  userRequestAlgorithmMillis = millis();
 }
 
 
@@ -177,14 +234,14 @@ void loop() {
     if (currentMillis - previousMillis >= userRequestInterval) { //CHECK FOR USER request
       //get request from server per 5minutes
       previousMillis = currentMillis;
-      if (client.connect(gsmData.server, gsmData.port)) {
+      if (connect()) {
         const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41";
         sendRequest(resource);
         if (skipResponseHeaders())
         {
           char response[MAX_CONTENT_SIZE];
           readReponseContent(response, sizeof(response));
-          
+
           if (parseEndDevicesData(response)) {
             if (deviceFlags[0].measurement) {
               for (int i = 0; i < devicesNum; i++) {
@@ -192,7 +249,7 @@ void loop() {
               }
               sendMeasuresToServer();
             }
-                        
+
             Serial.println(F("Disconnect"));
           }
           client.stop();
@@ -201,36 +258,30 @@ void loop() {
     }
 
     unsigned long currentTime = millis();
-    if(currentTime - previousMillis >= userRequestAlgorithmInterval) {
-      while (true)
-      {
-        client.stop();
-        const char* resource = "/embedded/setup?identifier=40E7CC41";
-        
-        //Send request and skipHeaders for parsing the response
-        if ((millis() - currentTime) >= 3000) {          
-          break;
-        }
-    
-        sendRequest(resource);
-        if (skipResponseHeaders()) {
-          char response[MAX_CONTENT_SIZE];
-          readReponseContent(response, sizeof(response));
-    
-          if (parseSetupData(response, &alarmData)) {
-            //////  Print Response Data  ////////////////////////
-            printUserData(&alarmData);
-              
-            //// Set Alarm ////
-            onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
-            client.stop();
-            Serial.println(F("Setup Updated"));
-            break;
+    if (currentTime - userRequestAlgorithmMillis >= userRequestAlgorithmInterval) {
+      userRequestAlgorithmMillis = currentTime;
+      if (connect()) {
+          const char* resource = "/embedded/setup?identifier=40E7CC41";
+          sendRequest(resource);
+          
+          if (skipResponseHeaders()) {
+            char response[MAX_CONTENT_SIZE];
+            readReponseContent(response, sizeof(response));
+  
+            if (parseSetupData(response, &alarmData)) {
+              //////  Print Response Data  ////////////////////////
+              printUserData(&alarmData);
+  
+              //// Set Alarm ////
+              onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
+              client.stop();
+              Serial.println(F("Setup Updated"));              
+            }
           }
         }
       }
-    }
-   
+    
+
     /////////////    check Measurement Irrigation Flags from Server (BY USER REQUEST) //////////////////////////////////////
     for (int i = 0; i < devicesNum; i++) {
       if (deviceFlags[i].irrigation) {
@@ -248,12 +299,12 @@ void loop() {
 
         if (hour() > deviceFlags[i].fromHour || (hour() == deviceFlags[i].fromHour && minute() >= deviceFlags[i].fromminute) ) {
           Serial.println("START THE IRRIGATION NOW!!!");
-          digitalWrite(enddevices[i].valvePin, HIGH);          
-          deviceFlags[i].startIrrigationFlag = true;          
+          digitalWrite(enddevices[i].valvePin, HIGH);
+          deviceFlags[i].startIrrigationFlag = true;
         }
       }
     }
-  //----END of USER Request to Embeeded---/////////
+    //----END of USER Request to Embeeded---/////////
   } else {
     for (int i = 0; i < devicesNum; i++) {
       if (enddevices[i].wateringflag == true) {
@@ -262,23 +313,23 @@ void loop() {
         digitalWrite(enddevices[i].valvePin, LOW);
       }
     }
-  }  
+  }
 }
 
 void sendIrrigationToServer(int counter) {
-   /////////  TO DO ----   CHANGE TO DYNAMIC BUFFER -----------------------
+  /////////  TO DO ----   CHANGE TO DYNAMIC BUFFER -----------------------
   DynamicJsonBuffer jsonBuffer(JSON_BUFFER_SIZE);
 
-  JsonObject& root = jsonBuffer.createObject(); 
+  JsonObject& root = jsonBuffer.createObject();
   root["autoIrrigFromTime"] = getDateTime(deviceFlags[counter].fromHour, deviceFlags[counter].fromminute);
-  root["autoIrrigUntilTime"] = getDateTime(hour(),minute());
+  root["autoIrrigUntilTime"] = getDateTime(hour(), minute());
   root["waterConsumption"] = 0;
-  
+
   String strAddr(deviceFlags[counter].zbAddress, HEX);
   strAddr.reserve(8);
-  strAddr.toUpperCase();   
+  strAddr.toUpperCase();
   root["identifier"] = strAddr;
-  
+
 
   root.prettyPrintTo(Serial);
   if (client.connect(gsmData.server, gsmData.port)) {
@@ -300,15 +351,15 @@ void sendIrrigationToServer(int counter) {
 
   Serial.println(F("Disconnect"));
   client.stop();
-  
-  
-  }
 
-String getDateTime(int hours , int minutes) {  
+
+}
+
+String getDateTime(int hours , int minutes) {
   String dtime;
   dtime.reserve(19);
   dtime = String(String(year()) + "-" + String(month()) + "-" + String(day()) + " " + String(hours) + ":" + String(minutes) + ":00");
-  return dtime;        
+  return dtime;
 }
 
 boolean checkAutomaticWaterTime() {
@@ -406,7 +457,7 @@ bool parseEndDevicesData(char* content) {
   if (!root.success()) {
     Serial.println(F("JSON parsing failed!"));
     return false;
-  } 
+  }
 
   for (int i = 0; i < devicesNum; i++) {
     const char* identifier = root[i]["id"];
@@ -417,7 +468,7 @@ bool parseEndDevicesData(char* content) {
     deviceFlags[i].fromminute = root[i]["frm"];
     deviceFlags[i].untilHour = root[i]["toh"];
     deviceFlags[i].untilMinute = root[i]["tom"];
-  }  
+  }
   return true;
 }
 
@@ -506,7 +557,7 @@ void WakeUpAndTakeMeasures() {
     }
 
     unsigned long kathisterisi = millis();
-    while (millis() - kathisterisi < 8000) { } //do nothing    
+    while (millis() - kathisterisi < 8000) { } //do nothing
   }
 
   if (chk) {
@@ -517,7 +568,7 @@ void WakeUpAndTakeMeasures() {
       frMinutes = minute() + 2;
       frHours = hour();
     }
-    
+
     Serial.print("FROM HOURS :");
     Serial.println(frHours);
     Serial.print("FROM MINUTES : ");
@@ -688,7 +739,7 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
 
       if (wtemp > enddevices[counter].maxtemp && soil < enddevices[counter].minhumidity) {
         Serial.println(F("Start watering: true"));
-        //enddevices[counter] 
+        //enddevices[counter]
         return true;
       }
       return false;
@@ -885,26 +936,26 @@ void splitMeasures(String input) {
 
 // read the buttons
 int read_LCD_buttons() {
- int adc_key_in = analogRead(0);      // read the value from the sensor 
- // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
- // we add approx 50 to those values and check to see if we are close
- if (adc_key_in > 1000) return btnNONE; // We make this the 1st option for speed reasons since it will be the most likely result
- // For V1.1 us this threshold
- if (adc_key_in < 100)  return btnRIGHT;  
- if (adc_key_in < 250)  return btnUP; 
- if (adc_key_in < 450)  return btnDOWN; 
- if (adc_key_in < 650)  return btnLEFT; 
- if (adc_key_in < 850)  return btnSELECT;  
+  int adc_key_in = analogRead(0);      // read the value from the sensor
+  // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
+  // we add approx 50 to those values and check to see if we are close
+  if (adc_key_in > 1000) return btnNONE; // We make this the 1st option for speed reasons since it will be the most likely result
+  // For V1.1 us this threshold
+  if (adc_key_in < 100)  return btnRIGHT;
+  if (adc_key_in < 250)  return btnUP;
+  if (adc_key_in < 450)  return btnDOWN;
+  if (adc_key_in < 650)  return btnLEFT;
+  if (adc_key_in < 850)  return btnSELECT;
 
- // For V1.0 comment the other threshold and use the one below:
-/*
- if (adc_key_in < 50)   return btnRIGHT;  
- if (adc_key_in < 195)  return btnUP; 
- if (adc_key_in < 380)  return btnDOWN; 
- if (adc_key_in < 555)  return btnLEFT; 
- if (adc_key_in < 790)  return btnSELECT;   
-*/
+  // For V1.0 comment the other threshold and use the one below:
+  /*
+    if (adc_key_in < 50)   return btnRIGHT;
+    if (adc_key_in < 195)  return btnUP;
+    if (adc_key_in < 380)  return btnDOWN;
+    if (adc_key_in < 555)  return btnLEFT;
+    if (adc_key_in < 790)  return btnSELECT;
+  */
 
 
- return btnNONE;  // when all others fail, return this...
+  return btnNONE;  // when all others fail, return this...
 }
