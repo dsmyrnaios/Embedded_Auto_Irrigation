@@ -30,7 +30,7 @@ struct measuringWateringFlags {
 };
 
 struct GsmData {
-  char* PINNUMBER      = (char*)"";                      //TODO on keypad 8492
+  char* PINNUMBER      = (char*)"8492";                      //TODO on keypad 8492
   char* GPRS_APN       = (char*)"internet.vodafone.gr";  // replace with your GPRS APN
   char* GPRS_LOGIN     = (char*)"";                      // replace with your GPRS login
   char* GPRS_PASSWORD  = (char*)"";                      // replace with your GPRS password
@@ -56,7 +56,8 @@ struct endDevice {
   boolean wateringflag;   
   boolean devflag;
   int valvePin;
-  char* Dtime[19];  
+  char* Dtime[19];
+  String DtimeIrrigation;  
 };
 
 
@@ -67,7 +68,6 @@ const char *monthName[12] = {
 
 const char *results[4] = {"humidity", "itemp", "wtemp", "soil"};
 
-
 const unsigned int devicedelay   = 8000;   // device delay for DeviceStart?
 const unsigned int minpinNumber  = 23;     // min valve pint for the end devices
 const unsigned int maxpinNumber  = 30;     // max valve pint for the end devices
@@ -75,8 +75,11 @@ const unsigned long HTTP_TIMEOUT = 10000;  // max respone time from server
 const size_t MAX_CONTENT_SIZE    = 512;    // max size of the HTTP response
 const int MAX_DEVICES_INPUT      = 10;     // max size for enddevices
 const int ARRAYSIZE = 4;
-const long userRequestInterval          = 300000;    // interval getting data from user 2 mins in milliseconds
-const long userRequestAlgorithmInterval = 120000; //43200000; // interval getting data for automatic algorithm 12 hours in milliseconds
+const long userRequestInterval          = 120000;   //interval for getting data from user 2 mins in milliseconds
+const long userRequestAlgorithmInterval = 500000;   //interval for getting data for automatic algorithm 12 hours in milliseconds
+const long damageInterval               = 1800000;  //interval for autoamtic watering on damage
+
+bool connectinDownFlag = false;
 
 //////////////////////--------------- Keypad shield const values ------------------//////////////////////
 #define btnRIGHT  0
