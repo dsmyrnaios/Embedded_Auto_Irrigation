@@ -111,7 +111,7 @@ void setup() {
         blinkX++;
         lcd.setCursor(blinkX, 0);
       }
-      else if (lcd_key == btnLEFT && blinkX >= 0) {
+      else if (lcd_key == btnLEFT && blinkX > 0) {
         delay(150);
         blinkX--;
         lcd.setCursor(blinkX, 0);
@@ -177,11 +177,11 @@ void setup() {
     if (connect())
     {
       const char* resource = "/embedded/setup?identifier=40E7CC41";
-      //Send request and skipHeaders for parsing the response
-      Serial.println(millis() - currentTime);
-      if ((millis() - currentTime) >= timeout) {
+      //Send request and skipHeaders for parsing the response      
+      if ((millis() - currentTime) >= timeout) { //30sec timeout
+        Serial.println("timeuot for json call");
+        connectinDownFlag = true;
         //TODO set flag for sim not initialized
-        Serial.println("Im in");
         break;
       }
 
@@ -205,8 +205,8 @@ void setup() {
     }
     else
     {
-      //TODO msg to lcd - connection on server failed
-      break;
+      Serial.println("Connection failed!");
+      //TODO msg to lcd - connection on server failed      
     }
   }
 
@@ -259,68 +259,66 @@ void loop() {
       }
     }
 
-    //    unsigned long currentTime = millis();
-    //    if (currentTime - userRequestAlgorithmMillis >= userRequestAlgorithmInterval) {
-    //      userRequestAlgorithmMillis = currentTime;
-    //      if (connect()) {
-    //        const char* resource = "/embedded/setup?identifier=40E7CC41";
-    //        sendRequest(resource);
-    //
-    //        if (skipResponseHeaders()) {
-    //          char response[MAX_CONTENT_SIZE];
-    //          readReponseContent(response, sizeof(response));
-    //
-    //          if (parseSetupData(response, &alarmData)) {
-    //            //////  Print Response Data  ////////////////////////
-    //            printUserData(&alarmData);
-    //
-    //            //// Set Alarm ////
-    //            onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
-    //            client.stop();
-    //            Serial.println(F("Setup Updated"));
-    //          }
-    //        }
-    //      }
-    //    }
+        unsigned long currentTime = millis();
+        if (currentTime - userRequestAlgorithmMillis >= userRequestAlgorithmInterval) {
+          userRequestAlgorithmMillis = currentTime;
+          if (connect()) {
+            const char* resource = "/embedded/setup?identifier=40E7CC41";
+            sendRequest(resource);
+    
+            if (skipResponseHeaders()) {
+              char response[MAX_CONTENT_SIZE];
+              readReponseContent(response, sizeof(response));
+    
+              if (parseSetupData(response, &alarmData)) {
+                //////  Print Response Data  ////////////////////////
+                printUserData(&alarmData);
+    
+                //// Set Alarm ////
+                onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
+                client.stop();
+                Serial.println(F("Setup Updated"));
+              }
+            }
+          }
+        }
 
 
     /////////////    check Measurement Irrigation Flags from Server (BY USER REQUEST) //////////////////////////////////////
-    //    for (int i = 0; i < devicesNum; i++) {
-    //      if (deviceFlags[i].irrigation) {
-    //        // END IRRIGATION FROM USER Request/////
-    //        if (hour() > deviceFlags[i].untilHour || (hour() == deviceFlags[i].untilHour && minute() >= deviceFlags[i].untilMinute) ) {
-    //          Serial.println("END THE IRRIGATION NOW!!!");
-    //          digitalWrite(enddevices[i].valvePin, LOW);
-    //          deviceFlags[i].startIrrigationFlag = false;
-    //          sendIrrigationToServer(i);
-    //          deviceFlags[i].irrigation = false;
-    //          //TODO set enddevices[i].startDateTime from USER REQUEST from struct measuringWateringFlags (deviceFlags[i].fromhour, deviceFlags[i].fromminute)
-    //          //TODO set enddevices[i].endDateTime = Current moment & send irrigation times to server
-    //          continue;
-    //        }
-    //
-    //        if (hour() > deviceFlags[i].fromHour || (hour() == deviceFlags[i].fromHour && minute() >= deviceFlags[i].fromminute) ) {
-    //          Serial.println("START THE IRRIGATION NOW!!!");
-    //          digitalWrite(enddevices[i].valvePin, HIGH);
-    //          deviceFlags[i].startIrrigationFlag = true;
-    //        }
-    //      }
-    //    }
+        for (int i = 0; i < devicesNum; i++) {
+          if (deviceFlags[i].irrigation) {
+            // END IRRIGATION FROM USER Request/////
+            if (hour() > deviceFlags[i].untilHour || (hour() == deviceFlags[i].untilHour && minute() >= deviceFlags[i].untilMinute) ) {
+              Serial.println("END THE IRRIGATION NOW!!!");
+              digitalWrite(enddevices[i].valvePin, LOW);
+              deviceFlags[i].startIrrigationFlag = false;
+              sendIrrigationToServer(i, getDateTime(deviceFlags[i].fromHour, deviceFlags[i].fromminute));
+              deviceFlags[i].irrigation = false;
+              //TODO set enddevices[i].startDateTime from USER REQUEST from struct measuringWateringFlags (deviceFlags[i].fromhour, deviceFlags[i].fromminute)
+              //TODO set enddevices[i].endDateTime = Current moment & send irrigation times to server
+              continue;
+            }
+    
+            if (hour() > deviceFlags[i].fromHour || (hour() == deviceFlags[i].fromHour && minute() >= deviceFlags[i].fromminute) ) {
+              Serial.println("START THE IRRIGATION NOW!!!");
+              digitalWrite(enddevices[i].valvePin, HIGH);
+              deviceFlags[i].startIrrigationFlag = true;
+            }
+          }
+        }
     //----END of USER Request to Embeeded---/////////
   } else {
     Serial.println("Automatic Algorithm Time");
     for (int i = 0; i < devicesNum; i++) {
-      Serial.print("DtimeIrrigation : ");
-      Serial.println(enddevices[i].DtimeIrrigation);
       if (enddevices[i].wateringflag == true) {
         digitalWrite(enddevices[i].valvePin, HIGH);
       } else {
         digitalWrite(enddevices[i].valvePin, LOW);
         if (enddevices[i].DtimeIrrigation != "") {
-          Serial.print("End of Irrigation ");
-          Serial.print(i, DEC);
+          Serial.print("End of Irrigation");          
           Serial.println(enddevices[i].DtimeIrrigation);
           //TDO send data to server for automatic watering
+          sendIrrigationToServer(i, enddevices[i].DtimeIrrigation);
           enddevices[i].DtimeIrrigation = "";
         }
       }
@@ -328,20 +326,19 @@ void loop() {
   }
 }
 
-void sendIrrigationToServer(int counter) {
-  /////////  TO DO ----   CHANGE TO DYNAMIC BUFFER -----------------------
+void sendIrrigationToServer(int indx, String dtfrom) {
   DynamicJsonBuffer jsonBuffer(JSON_BUFFER_SIZE);
 
   JsonObject& root = jsonBuffer.createObject();
-  root["autoIrrigFromTime"] = getDateTime(deviceFlags[counter].fromHour, deviceFlags[counter].fromminute);
+  root["autoIrrigFromTime"] = dtfrom;
   root["autoIrrigUntilTime"] = getDateTime(hour(), minute());
   root["waterConsumption"] = 0;
+  root["identifier"] = records[indx].zbaddress;
 
-  String strAddr(deviceFlags[counter].zbAddress, HEX);
-  strAddr.reserve(8);
-  strAddr.toUpperCase();
-  root["identifier"] = strAddr;
-
+//  String strAddr(deviceFlags[counter].zbAddress, HEX);
+//  strAddr.reserve(8);
+//  strAddr.toUpperCase();
+//  root["identifier"] = strAddr;
 
   root.prettyPrintTo(Serial);
   if (client.connect(gsmData.server, gsmData.port)) {
@@ -392,11 +389,13 @@ boolean checkAutomaticWaterTime() {
       }
     }
   } else {
-    if (nowTotalminutes <= alarmtominutes) { //p.e 23:15 - 04:10 now: 01:55
-      return true;
-    } else {                                //p.e 11:00 - 15:00 now: 10:00
-      return false;
+    if (alarmData.toHours < alarmData.frHours) {
+      alarmtominutes = 24 * 60 + alarmData.toHours * 60 + alarmData.toMinutes;
     }
+
+    if ((nowTotalminutes >= alarmfromminutes) && (nowTotalminutes <= alarmtominutes)) {
+      return true;
+    }    
   }
 
   return false;
@@ -593,8 +592,8 @@ void WakeUpAndTakeMeasures() {
       enddevices[i].wateringflag = false;
     }
 
-    unsigned long kathisterisi = millis();
-    while (millis() - kathisterisi < 8000) { } //do nothing
+    unsigned long delaymills = millis();
+    while (millis() - delaymills < 8000) { } //do nothing
   }
 
   if (chk) {
@@ -711,12 +710,12 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
     Serial.println(F("Reading End Device Sensor Data..."));
     sensorsData = ReadEndDeviceData();
 
-    if (sensorsData == "M") {
+    if (sensorsData == "M") { 
       return false;
       /// MODEM STATUS
-    } else if (sensorsData == "F") {
+    } else if (sensorsData == "F") { //FAIL
       return false;
-    } else if (sensorsData == "O") {
+    } else if (sensorsData == "O") { //FAIL
       return false;
     } else { //We have sample Ladies
 
@@ -731,7 +730,8 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
       humidity = measuresValues[0];
       itemp = measuresValues[1];
       wtemp = measuresValues[2];
-      soil = map((int)measuresValues[3], 270, 1023, 100, 0);
+      Serial.println((int)measuresValues[3]);
+      soil = map((int)measuresValues[3], 7, 1023, 100, 0);
 
       //float* observationValues;
       //observationValues = splitMeasures(sensorsData);
@@ -978,7 +978,7 @@ int read_LCD_buttons() {
   // we add approx 50 to those values and check to see if we are close
   if (adc_key_in > 980) return btnNONE; // We make this the 1st option for speed reasons since it will be the most likely result
   // For V1.1 us this threshold
-  Serial.println(adc_key_in);
+  //Serial.println(adc_key_in);
 
   if (adc_key_in < 100)  return btnRIGHT;
   if (adc_key_in < 250)  return btnUP;
