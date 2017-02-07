@@ -95,6 +95,28 @@ int blinkY = 0;
 // select the pins used on the LCD panel
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 
+//////////////////////////////////////////
+const byte Rows= 4; //number of rows on the keypad i.e. 4
+const byte Cols= 3; //number of columns on the keypad i,e, 3
+
+//we will definne the key map as on the key pad:
+
+char keymap[Rows][Cols]=
+{
+{'1', '2', '3'},
+{'4', '5', '6'},
+{'7', '8', '9'},
+{'*', '0', '#'}
+};
+
+//  a char array is defined as it can be seen on the above
+
+
+//keypad connections to the arduino terminals is given as:
+
+byte rPins[Rows]= {34,35,36,37}; //Rows 0 to 3
+byte cPins[Cols]= {38,39,40}; //Columns 0 to 2
+
 //////////////////////--------------- APN information obrained from your network provider------------------//////////////////////
 //#define PINNUMBER      "8492" //TODO on keypad
 //#define GPRS_APN       "internet.vodafone.gr" // replace with your GPRS APN
