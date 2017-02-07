@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <LiquidCrystal.h>
 #include "DataStructures.h"
+#include "Keypad.h"
 
 
 /////////////////////////////////   PUBLIC OBJECT INSTANCE    /////////////////////////////////
@@ -21,6 +22,8 @@ GsmData gsmData;
 
 //XBEE
 XBee xbee = XBee();
+
+Keypad kpd= Keypad(makeKeymap(keymap), rPins, cPins, Rows, Cols);
 
 //CLOCK
 tmElements_t tm;
@@ -74,23 +77,23 @@ void setup() {
 
 
   ///////////////////////////////////////////   LCD SETUP   ///////////////////////////////////////////////
-  lcd.begin(16, 2);              // start the library
-  lcd.setCursor(0, 0);
-  lcd.print("Give pin number"); // print a simple message
-
-  while (true) {
-    unsigned long currentTime = millis();
-    if (currentTime - previousMillis >= 5000) {  //delay(5000);
-      previousMillis = currentTime;
-      lcd.clear();
-      break;
-    }
-  }
-
-  lcd.setCursor(0, 0);
-  lcd.print("0123456789"); // print a simple message
-  lcd.setCursor(0, 1);
-  lcd.print("____"); // print a simple message
+//  lcd.begin(16, 2);              // start the library
+//  lcd.setCursor(0, 0);
+//  lcd.print("Give pin number"); // print a simple message
+//
+//  while (true) {
+//    unsigned long currentTime = millis();
+//    if (currentTime - previousMillis >= 5000) {  //delay(5000);
+//      previousMillis = currentTime;
+//      lcd.clear();
+//      break;
+//    }
+//  }
+//
+//  lcd.setCursor(0, 0);
+//  lcd.print("0123456789"); // print a simple message
+//  lcd.setCursor(0, 1);
+//  lcd.print("____"); // print a simple message
 
   ///////////////////////////////////////////   GSM SETUP    ///////////////////////////////////////////////
 
@@ -98,48 +101,69 @@ void setup() {
   // If your SIM has PIN, pass it as a parameter of begin() in quotes
 
   boolean checkWhile = true;
-  String PINNUMBER_LOCAL;
-  PINNUMBER_LOCAL.reserve(4);
+  char PINNUMBER_LOCAL[4];
+  //PINNUMBER_LOCAL.reserve(4);
 
+  
   while (true) {
+    Serial.println(F("Please enter your PIN!"));
+    int pinCounter = 0;  
     while (checkWhile) {
-      lcd.setCursor(blinkX, 0);
-      lcd.blink();
-      int lcd_key = read_LCD_buttons();
-      if (lcd_key == btnRIGHT && blinkX <= 9) {
-        delay(150);
-        blinkX++;
-        lcd.setCursor(blinkX, 0);
-      }
-      else if (lcd_key == btnLEFT && blinkX > 0) {
-        delay(150);
-        blinkX--;
-        lcd.setCursor(blinkX, 0);
-      } else if (lcd_key == btnSELECT && blinkY <= 3) {
-        delay(200);
-        lcd.setCursor(blinkY, 1);
-        lcd.print(blinkX);
-        lcd.setCursor(blinkX, 0);
-        /////////////////////////// metatroph tou int se string kai meta se char /n the end of char array so b is 1+ /n
-        String c = (String)blinkX;
-        ///////////////////////////
-        //PINNUMBER_LOCAL[blinkY] = c;
-        PINNUMBER_LOCAL += c;
-        Serial.println(c);
-        blinkY++;
-      }
-
-      if (PINNUMBER_LOCAL[3] != (char)0) {
-        checkWhile = false;
-        char buf[4];
-        PINNUMBER_LOCAL.toCharArray(buf, PINNUMBER_LOCAL.length() + 1);
-        //gsmData.PINNUMBER = (char*)buf;
-        gsmData.PINNUMBER = (char*)"8492";
-        Serial.println(gsmData.PINNUMBER);
-        Serial.println(F("PIN Initialized"));
+//      lcd.setCursor(blinkX, 0);
+//      lcd.blink();
+//      int lcd_key = read_LCD_buttons();
+//      if (lcd_key == btnRIGHT && blinkX <= 9) {
+//        delay(150);
+//        blinkX++;
+//        lcd.setCursor(blinkX, 0);
+//      }
+//      else if (lcd_key == btnLEFT && blinkX > 0) {
+//        delay(150);
+//        blinkX--;
+//        lcd.setCursor(blinkX, 0);
+//      } else if (lcd_key == btnSELECT && blinkY <= 3) {
+//        delay(200);
+//        lcd.setCursor(blinkY, 1);
+//        lcd.print(blinkX);
+//        lcd.setCursor(blinkX, 0);
+//        /////////////////////////// metatroph tou int se string kai meta se char /n the end of char array so b is 1+ /n
+//        String c = (String)blinkX;
+//        ///////////////////////////
+//        //PINNUMBER_LOCAL[blinkY] = c;
+//        PINNUMBER_LOCAL += c;
+//        Serial.println(c);
+//        blinkY++;
+//      }
+//
+//      if (PINNUMBER_LOCAL[3] != (char)0) {
+//        checkWhile = false;
+//        char buf[4];
+//        PINNUMBER_LOCAL.toCharArray(buf, PINNUMBER_LOCAL.length() + 1);
+//        //gsmData.PINNUMBER = (char*)buf;
+//        gsmData.PINNUMBER = (char*)"8492";
+//        Serial.println(gsmData.PINNUMBER);
+//        Serial.println(F("PIN Initialized"));
+//      }
+      char keypressed = kpd.getKey();
+      if (keypressed != NO_KEY)
+      { 
+        Serial.println(keypressed);
+        PINNUMBER_LOCAL[pinCounter] = keypressed;
+        Serial.println((char*)PINNUMBER_LOCAL);
+        pinCounter++;
+        
+        if(pinCounter == 4){
+          //char buf[4];
+          //PINNUMBER_LOCAL.toCharArray(buf, PINNUMBER_LOCAL.length() + 1);
+          gsmData.PINNUMBER = (char*)PINNUMBER_LOCAL;  
+          //gsmData.PINNUMBER = (char*)"8492";        
+          checkWhile = false;
+          pinCounter = 0;          
+        }
       }
     }
 
+    Serial.println("I'm in");
     if ((gsmAccess.begin(gsmData.PINNUMBER) == GSM_READY) & (gprs.attachGPRS(gsmData.GPRS_APN, gsmData.GPRS_LOGIN, gsmData.GPRS_PASSWORD) == GPRS_READY)) {
 
       break;
@@ -152,7 +176,7 @@ void setup() {
       }
       blinkX = 0;
       blinkY = 0;
-      PINNUMBER_LOCAL = "";
+      //PINNUMBER_LOCAL = "";
     } else {
       Serial.println(F("Not connected"));
       unsigned long currentMillis = millis();
@@ -701,8 +725,8 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
   //TODO must change to char*;
   String sensorsData;
   sensorsData.reserve(25);
-  unsigned long previousMillis = millis();
-
+  
+    unsigned long previousMillis = millis();
   if (WakeUpEndDevice(destAddress)) {
     while (millis() - previousMillis < 5000) {
       /*wait for 5sec*/
@@ -730,8 +754,9 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
       humidity = measuresValues[0];
       itemp = measuresValues[1];
       wtemp = measuresValues[2];
-      Serial.println((int)measuresValues[3]);
-      soil = map((int)measuresValues[3], 7, 1023, 100, 0);
+      
+      int sensorValue = constrain ((int)measuresValues[3], 300,1023); 
+      soil = map(sensorValue, 7, 1023, 100, 0);
 
       //float* observationValues;
       //observationValues = splitMeasures(sensorsData);
@@ -971,30 +996,4 @@ void splitMeasures(String input) {
   }
 }
 
-// read the buttons
-int read_LCD_buttons() {
-  int adc_key_in = analogRead(0);      // read the value from the sensor
-  // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
-  // we add approx 50 to those values and check to see if we are close
-  if (adc_key_in > 980) return btnNONE; // We make this the 1st option for speed reasons since it will be the most likely result
-  // For V1.1 us this threshold
-  //Serial.println(adc_key_in);
 
-  if (adc_key_in < 100)  return btnRIGHT;
-  if (adc_key_in < 250)  return btnUP;
-  if (adc_key_in < 350)  return btnDOWN;
-  if (adc_key_in < 550)  return btnLEFT;
-  if (adc_key_in < 850)  return btnSELECT;
-
-  // For V1.0 comment the other threshold and use the one below:
-  /*
-    if (adc_key_in < 50)   return btnRIGHT;
-    if (adc_key_in < 195)  return btnUP;
-    if (adc_key_in < 380)  return btnDOWN;
-    if (adc_key_in < 555)  return btnLEFT;
-    if (adc_key_in < 790)  return btnSELECT;
-  */
-
-
-  return btnNONE;  // when all others fail, return this...
-}
