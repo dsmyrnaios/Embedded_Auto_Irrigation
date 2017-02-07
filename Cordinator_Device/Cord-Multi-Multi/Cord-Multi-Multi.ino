@@ -11,6 +11,7 @@
 #include <LiquidCrystal.h>
 #include "DataStructures.h"
 #include "Keypad.h"
+#include <Adafruit_LEDBackpack.h>
 
 
 /////////////////////////////////   PUBLIC OBJECT INSTANCE    /////////////////////////////////
@@ -24,6 +25,7 @@ GsmData gsmData;
 XBee xbee = XBee();
 
 Keypad kpd= Keypad(makeKeymap(keymap), rPins, cPins, Rows, Cols);
+Adafruit_AlphaNum4 alpha4 = Adafruit_AlphaNum4();
 
 //CLOCK
 tmElements_t tm;
@@ -148,6 +150,7 @@ void setup() {
       if (keypressed != NO_KEY)
       { 
         Serial.println(keypressed);
+        alpha4.writeDigitAscii(pinCounter, keypressed);
         PINNUMBER_LOCAL[pinCounter] = keypressed;
         Serial.println((char*)PINNUMBER_LOCAL);
         pinCounter++;
