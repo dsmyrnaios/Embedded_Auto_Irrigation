@@ -5,12 +5,19 @@
 #include <avr/sleep.h>
 #include <SoftwareSerial.h>
 
-#define DHTPIN 4     //DIGITAL HUMIDITY-TEMPERATURE PIN
-#define DHTTYPE DHT22 //DHT11, DHT21, DHT22
 
-int sensorPin = A0; ///////////  WATERPROOF ANALOG SENSOR TEMPERATURE
-int analSol = A2;   //////////   ANALOG SOIL HUMIDITY
-int soilPin = 7;    //////////   DIGITAL OUT OF SOIL HUMIDITY (DEBUG PURPOSES)
+#define DHTTYPE DHT22 //DHT11, DHT21, DHT22
+#define DHTPIN 4     // pin6 DIGITAL HUMIDITY-TEMPERATURE PIN
+
+///////  Sensors Power Pins ///////////
+int powerDigitalHumidityPin = 7; //pin13
+int powerWaterProofPin = 8; //pin14
+int powerSoilHumidity = 9; //pin14
+
+//////   Sensors Data Pins ///////////
+int dataWaterProofPin = A0; // pin23//////////  WATERPROOF ANALOG SENSOR TEMPERATURE
+int dataSoilHumidityPin = A2;   //pin25/////////   ANALOG SOIL HUMIDITY
+
 
 /*/////////////////////////////////////////////////////// BYTE ARRAY SENSOR DATA //////////////////////////////////////////////////////////////
   ////////////////////////////  Internal Humidity       Internal Temperature         WaterProof Temperature     Soil             //////////////
@@ -23,40 +30,39 @@ ZBRxResponse rx = ZBRxResponse(); /////////RX GET DATA
 ModemStatusResponse msr = ModemStatusResponse();////////////TX STATUS RESPONSE
 DHT dht(DHTPIN, DHTTYPE);
 
+/// Software Serial Pins for Zigbee S2 Use ////
 uint8_t ssRX = 10;
-// Connect Arduino pin 9 to RX of usb-serial device
 uint8_t ssTX = 11;
-// Remember to connect all devices to a common Ground: XBee, Arduino and USB-Serial device
 SoftwareSerial nss(ssRX, ssTX);
+
 
 /////////////////////////////////////////////////////  SETUP /////////////////////////////////////////////////////
 void setup() {
-  //////////   DIGITAL OUT OF SOIL HUMIDITY (DEBUG PURPOSES)
+  //////////   
   pinMode(A0, INPUT);   ///////////  WATERPROOF ANALOG SENSOR TEMPERATURE
   pinMode(A2, INPUT);   //////////   ANALOG SOIL HUMIDITY
-  pinMode(2, INPUT);
+  pinMode(2, INPUT); //Rx Interupt from Zigbee
+  pinMode(powerDigitalHumidityPin, OUTPUT); 
+  pinMode(powerWaterProofPin, OUTPUT); 
+  pinMode(powerSoilHumidity, OUTPUT); 
+  
   ////////ZIGBEE INIT
   dht.begin();         ///////DHT-22 DIGITAL SENSOR INIT
   Serial.begin(9600);
   nss.begin(9600);
   xbee.begin(nss);
-
-
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 }
 
 
 //////////////////////////////////////////////////////   LOOP   ///////////////////////////////////////////////////////////
 
-int times = 0;
-boolean flagenable = false;
-
+int timesOfWakeUp = 0;
 void loop() {
-
-
-
-
-
+  digitalWrite(powerDigitalHumidityPin, HIGH);
+  digitalWrite(powerWaterProofPin, HIGH);
+  digitalWrite(powerSoilHumidity, HIGH);  
+  
   unsigned long previousMillis = millis();
   Serial.println("Reading Sensors...");
   Serial.println("---------------------------");
@@ -65,26 +71,26 @@ void loop() {
   Serial.print("DATA SENSORS STRING :");
   Serial.println(SData);
 
-
+  digitalWrite(powerDigitalHumidityPin, LOW);
+  digitalWrite(powerWaterProofPin, LOW);
+  digitalWrite(powerSoilHumidity, LOW);  
 
   SendMeasures(SData);
-  times++;
+  timesOfWakeUp++;
   Serial.print("Awake: ");
-  Serial.print(times);
+  Serial.print(timesOfWakeUp);
   Serial.print(" times ");
   Serial.print(" for ");
   Serial.print(millis() - previousMillis);
   Serial.println(" sec");
   Serial.println("/---------------------------/");
   delay(500);
-
-
+  
   enterSleep();
 }
 
 //////////////////////////////////////  READ SENSORS //////////////////////////////////////////////////////////////////////////////////////////
 String readSensors() {
-
 
   // previousMillis = millis();
   /////////////////////////////////////////////////
@@ -92,41 +98,48 @@ String readSensors() {
 
   //////////////////////////////////////Digital Humidity-Temperature/////////////////////
   //Read Humidity
-  float h  = dht.readHumidity();
-
-
+  float digitalHumidity  = dht.readHumidity();
 
   // Read temperature as Celsius
-  float t = dht.readTemperature();
+  float digitalTemperature = dht.readTemperature();
 
 
   // Check if any reads failed and exit early (to try again).
-  if (isnan(h) || isnan(t)) {
+  if (isnan(digitalHumidity) || isnan(digitalTemperature)) {
     Serial.println("Failed to read from DHT sensor!");
+    digitalHumidity = 0;
+    digitalTemperature = 0;
+  }else{
+    Serial.print("Humidity: ");
+    Serial.print(digitalHumidity);
+    Serial.print(" %\t");
+    Serial.print("Temperature: ");
+    Serial.print(digitalTemperature);
+    Serial.println(" *C ");
   }
-  Serial.print("Humidity: ");
-  Serial.print(h);
-  Serial.print(" %\t");
-  Serial.print("Temperature: ");
-  Serial.print(t);
-  Serial.println(" *C ");
+  
 
   /////////////////////////////WaterProof Analog Temperature//////////
 
   delay(1000);
-  int oo = analogRead(sensorPin);
+  int waterProof = analogRead(dataWaterProofPin);
   delay(10);
-  oo = analogRead(sensorPin);
+  waterProof = analogRead(dataWaterProofPin);
   delay(10);
-  float temperatureC  = ( 5.0 * oo * 100.0) / 1024.0 ;  //converting from 10 mv per degree wit 500 mV offset
+  float waterProofTemperatureC  = ( 5.0 * waterProof * 100.0) / 1024.0 ;  //converting from 10 mv per degree wit 500 mV offset
 
   //  //to degrees ((voltage - 500mV) times 100)
   //  Serial.print("Voltage: ");
   //  Serial.println(oo * 5.0 / 1023.0);
 
-  Serial.print("WaterProof Temperature : ");
-  Serial.print(temperatureC);
-  Serial.println(" Degrees C");
+  if (isnan(waterProofTemperatureC)) {
+    Serial.println("Failed to read from WaterProof Sensor");
+    waterProofTemperatureC = 0;    
+  }else{
+    Serial.print("WaterProof Temperature : ");
+    Serial.print(waterProofTemperatureC);
+    Serial.println(" Degrees C");
+  }  
 
 
   /////////////////////////////////////////////////////////////////////////
@@ -134,13 +147,18 @@ String readSensors() {
   ////////////////////////////////////////Soil Humidity/////////////////////
   //
   delay(1000);
-
-  int temp = analogRead(analSol);
+  int soilHumidity = analogRead(dataSoilHumidityPin);
   delay(10);
-  temp = analogRead(analSol);
+  soilHumidity = analogRead(dataSoilHumidityPin);
   delay(10);
-  Serial.print("Soil Humidity ANA: ");
-  Serial.println(temp);
+  if (isnan(soilHumidity)) {
+    Serial.println("Failed to read from Soil Humidity Sensor");
+    soilHumidity = 0;    
+  }else{
+    Serial.print("Soil Humidity ANA: ");
+    Serial.println(soilHumidity);
+  } 
+  
 
   //
   //
@@ -164,7 +182,7 @@ String readSensors() {
   //  Serial.print(currentMillis - previousMillis); //360 sec
   //  Serial.println(" msec"); //360 sec
 
-  return String(String(h) + "," + String(t) + "," + String(temperatureC) + "," + String(temp));
+  return String(String(digitalHumidity) + "," + String(digitalTemperature) + "," + String(waterProofTemperatureC) + "," + String(soilHumidity));
 
   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 }
