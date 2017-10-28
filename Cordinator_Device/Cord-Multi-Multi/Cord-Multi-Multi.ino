@@ -11,7 +11,7 @@
 #include <LiquidCrystal.h>
 #include "DataStructures.h"
 #include "Keypad.h"
-#include <Adafruit_LEDBackpack.h>
+
 
 
 /////////////////////////////////   PUBLIC OBJECT INSTANCE    /////////////////////////////////
@@ -25,7 +25,7 @@ GsmData gsmData;
 XBee xbee = XBee();
 
 Keypad kpd= Keypad(makeKeymap(keymap), rPins, cPins, Rows, Cols);
-Adafruit_AlphaNum4 alpha4 = Adafruit_AlphaNum4();
+
 
 //CLOCK
 tmElements_t tm;
@@ -111,46 +111,10 @@ void setup() {
     Serial.println(F("Please enter your PIN!"));
     int pinCounter = 0;  
     while (checkWhile) {
-//      lcd.setCursor(blinkX, 0);
-//      lcd.blink();
-//      int lcd_key = read_LCD_buttons();
-//      if (lcd_key == btnRIGHT && blinkX <= 9) {
-//        delay(150);
-//        blinkX++;
-//        lcd.setCursor(blinkX, 0);
-//      }
-//      else if (lcd_key == btnLEFT && blinkX > 0) {
-//        delay(150);
-//        blinkX--;
-//        lcd.setCursor(blinkX, 0);
-//      } else if (lcd_key == btnSELECT && blinkY <= 3) {
-//        delay(200);
-//        lcd.setCursor(blinkY, 1);
-//        lcd.print(blinkX);
-//        lcd.setCursor(blinkX, 0);
-//        /////////////////////////// metatroph tou int se string kai meta se char /n the end of char array so b is 1+ /n
-//        String c = (String)blinkX;
-//        ///////////////////////////
-//        //PINNUMBER_LOCAL[blinkY] = c;
-//        PINNUMBER_LOCAL += c;
-//        Serial.println(c);
-//        blinkY++;
-//      }
-//
-//      if (PINNUMBER_LOCAL[3] != (char)0) {
-//        checkWhile = false;
-//        char buf[4];
-//        PINNUMBER_LOCAL.toCharArray(buf, PINNUMBER_LOCAL.length() + 1);
-//        //gsmData.PINNUMBER = (char*)buf;
-//        gsmData.PINNUMBER = (char*)"8492";
-//        Serial.println(gsmData.PINNUMBER);
-//        Serial.println(F("PIN Initialized"));
-//      }
       char keypressed = kpd.getKey();
       if (keypressed != NO_KEY)
       { 
-        Serial.println(keypressed);
-        alpha4.writeDigitAscii(pinCounter, keypressed);
+        Serial.println(keypressed);       
         PINNUMBER_LOCAL[pinCounter] = keypressed;
         Serial.println((char*)PINNUMBER_LOCAL);
         pinCounter++;
@@ -399,6 +363,10 @@ String getDateTime(int hours , int minutes) {
 }
 
 boolean checkAutomaticWaterTime() {
+  Serial.println(F("From Hours"));
+  Serial.println(alarmData.frHours);
+  Serial.print(F("From Minutes"));
+  Serial.println(alarmData.frMinutes);
   int alarmfromminutes = alarmData.frHours * 60 + alarmData.frMinutes;
   int alarmtominutes = alarmData.toHours * 60 + alarmData.toMinutes;
   int nowTotalminutes = hour() * 60 + minute();
