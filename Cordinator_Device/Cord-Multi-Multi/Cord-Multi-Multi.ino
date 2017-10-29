@@ -8,9 +8,11 @@
 #include <ArduinoJson.h>
 #include <string.h>
 #include <stdlib.h>
-#include <LiquidCrystal.h>
 #include "DataStructures.h"
 #include "Keypad.h"
+#include <AltSoftSerial.h>
+
+
 
 
 
@@ -25,6 +27,8 @@ GsmData gsmData;
 XBee xbee = XBee();
 
 Keypad kpd= Keypad(makeKeymap(keymap), rPins, cPins, Rows, Cols);
+AltSoftSerial Serial7Segment;
+
 
 
 //CLOCK
@@ -76,6 +80,9 @@ void setup() {
   else {
     Serial.println(F("RTC has set the system time"));
   }
+
+  Serial7Segment.begin(9600); //Talk to the Serial7Segment at 9600 bps
+  Serial7Segment.write('v'); //Reset the display - this forces the cursor to return to the beginning of the display
 
 
   ///////////////////////////////////////////   LCD SETUP   ///////////////////////////////////////////////
@@ -137,12 +144,9 @@ void setup() {
     } else if (gsmAccess.begin(gsmData.PINNUMBER) != GSM_READY) {
       Serial.println("Wrong Password");
       checkWhile = true;
-      for (int i = 0; i < 4; i++) {
-        lcd.setCursor(i, 1);
-        lcd.print("_");
-      }
-      blinkX = 0;
-      blinkY = 0;
+      char tempString[10] = "22";
+      Serial7Segment.print(tempString);
+     
       //PINNUMBER_LOCAL = "";
     } else {
       Serial.println(F("Not connected"));

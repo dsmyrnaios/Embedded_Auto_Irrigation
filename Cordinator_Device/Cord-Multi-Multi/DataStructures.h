@@ -92,8 +92,7 @@ bool connectinDownFlag = false;
 int blinkX = 0;
 int blinkY = 0;
 
-// select the pins used on the LCD panel
-LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+
 
 //////////////////////////////////////////
 const byte Rows= 4; //number of rows on the keypad i.e. 4
