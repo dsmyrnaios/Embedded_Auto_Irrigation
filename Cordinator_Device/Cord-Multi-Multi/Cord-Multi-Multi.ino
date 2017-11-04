@@ -58,6 +58,8 @@ void setup() {
   ///////////////////////////////////////////////           ZIGBEE SETUP                       /////////////////////////
   Serial1.begin(9600);
   xbee.begin(Serial1);
+  alpha4.begin(0x70);
+  alpha4.writeDigitRaw(3, 0x0);
 
   /////////////////////////////////////////////             RTC SETUP             /////////////////////////////////////
   Wire.begin();
