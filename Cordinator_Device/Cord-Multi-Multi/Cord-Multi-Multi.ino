@@ -8,9 +8,9 @@
 #include <ArduinoJson.h>
 #include <string.h>
 #include <stdlib.h>
-#include <LiquidCrystal.h>
 #include "DataStructures.h"
 #include "Keypad.h"
+#include <AltSoftSerial.h>
 
 
 
@@ -26,6 +26,7 @@ GsmData gsmData;
 //XBEE
 XBee xbee = XBee();
 Keypad kpd = Keypad(makeKeymap(keymap), rPins, cPins, Rows, Cols);
+AltSoftSerial Serial7Segment;
 
 
 //CLOCK
@@ -60,6 +61,8 @@ void setup() {
 
 
   Serial.begin(9600);     //SERIAL CONFIGURATION
+  Serial7Segment.begin(9600); //Talk to the Serial7Segment at 9600 bps
+  Serial7Segment.write('v'); //Reset the display - this forces the cursor to return to the beginning of the display
 
 
   ///////////////////////////////////////////////           ZIGBEE SETUP                       /////////////////////////
@@ -85,6 +88,7 @@ void setup() {
     }
     else {
       rtcInitFlag = true;
+      printErrorCodes(0x76, 0x45, 0x30, 0x30, 0x31);
       Serial.println(F("RTC has set the system time"));
     }
   }
@@ -114,11 +118,18 @@ void setup() {
 
   // Start GSM shield
   if (rtcInitFlag) {
-//    gsmInitFlag = gsmInit();
-    gsmInitFlag = false;
+    gsmInitFlag = gsmInit();
+    //    gsmInitFlag = false;
     if (gsmInitFlag) {
       Serial.println(F("GSM initialized"));
     } else {
+      printErrorCodes(0x76, 0x45, 0x30, 0x30, 0x32);
+      //      Serial7Segment.write(0x76);  // Clear display command, resets cursor
+      //      Serial7Segment.write(0x45);  // Hex value for 1, will display '1'
+      //      Serial7Segment.write(0x30);   // ASCII value for '2', will display '2'
+      //      Serial7Segment.write(0x30);  // Hex value for 10, will display 'A'
+      //      Serial7Segment.write(0x31);   // ASCII value for 'B', will display 'b'
+
       Serial.println(F("GSM NOT initialized"));
     }
   }
@@ -177,6 +188,9 @@ void setup() {
     //set on alarm every week for 30 minutes
     errorWeeklyIrrigation = true;
     devicesNum = 3;
+    if (gsmInitFlag) {
+      printErrorCodes(0x76, 0x45, 0x30, 0x30, 0x33);
+    }
     //
   } else {
     errorWeeklyIrrigation = false;
@@ -199,7 +213,7 @@ void loop() {
   printTime();
   if (errorWeeklyIrrigation) {
     for (int i = 0; i < devicesNum; i++) {
-      if (weekday() == 1 && (hour() == 3) && (14 < minute()) && (minute()< 17)) {
+      if (weekday() == 1 && (hour() == 3) && (14 < minute()) && (minute() < 17)) {
         Serial.println("Error Weekly Irrigation");
         Serial.print("ValvePin :");
         Serial.println(enddevices[i].valvePin);
@@ -963,6 +977,7 @@ boolean gsmInit() {
     Serial.println(gmsmAttempts);
     Serial.println(F("Please enter your PIN!"));
     int pinCounter = 0;
+    Serial7Segment.write(0x76);
     while (checkWhile) {
       char keypressed = kpd.getKey();
       if (keypressed != NO_KEY)
@@ -970,8 +985,26 @@ boolean gsmInit() {
         Serial.println(keypressed);
         PINNUMBER_LOCAL[pinCounter] = keypressed;
         Serial.println((char*)PINNUMBER_LOCAL);
+        switch (pinCounter) {
+          case 0 :
+            Serial7Segment.write(keypressed); // Send the data byte, with value 1
+            break;
+          case 1 :
+            Serial7Segment.write(0x79); // Send the Move Cursor Command
+            Serial7Segment.write(0x01); // Send the data byte, with value 1
+            Serial7Segment.write(keypressed);    // Write a 7, should be displayed on 2nd digit
+            break;
+          case 2 :
+            Serial7Segment.write(0x79); // Send the Move Cursor Command
+            Serial7Segment.write(0x02); // Send the data byte, with value 1
+            Serial7Segment.write(keypressed);    // Write a 7, should be displayed on 2nd digit
+            break;
+          case 3 :
+            Serial7Segment.write(0x79); // Send the Move Cursor Command
+            Serial7Segment.write(0x03); // Send the data byte, with value 1
+            Serial7Segment.write(keypressed);    // Write a 7, should be displayed on 2nd digit
+        }
         pinCounter++;
-
         if (pinCounter == 4) {
           //char buf[4];
           //PINNUMBER_LOCAL.toCharArray(buf, PINNUMBER_LOCAL.length() + 1);
@@ -1005,6 +1038,14 @@ boolean gsmInit() {
     }
   }
   return gsmInit;
+}
+
+void printErrorCodes(byte firstSegm, byte secondSegm, byte thirdSegm, byte fourthSegm, byte fifthSegm ) {
+  Serial7Segment.write(firstSegm);
+  Serial7Segment.write(secondSegm);
+  Serial7Segment.write(thirdSegm);
+  Serial7Segment.write(fourthSegm);
+  Serial7Segment.write(fifthSegm);
 }
 
 
