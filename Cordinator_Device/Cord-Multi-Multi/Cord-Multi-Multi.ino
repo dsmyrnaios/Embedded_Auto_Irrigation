@@ -47,17 +47,20 @@ struct record_data records[MAX_DEVICES_INPUT];
 struct measuringWateringFlags deviceFlags[MAX_DEVICES_INPUT];
 
 float measuresValues[4];
+bool rtcInitFlag = false;      //RTC flag
+bool gsmInitFlag = false;    //GSM flags
+bool gsmInitDataFlag = false; //GSM init data flag
+bool errorWeeklyIrrigation = false;
+unsigned gsmInitDataAttempts = 15;
 
 
 /////////////////////////////////   SETUP    /////////////////////////////////
 void setup() {
-  //bool parse = false;     //RTC flags
-  bool config = false;      //RTC flags
+
+
 
   Serial.begin(9600);     //SERIAL CONFIGURATION
 
-  Serial.println("GSM networks scanner");
-  scannerNetworks.begin();
 
   ///////////////////////////////////////////////           ZIGBEE SETUP                       /////////////////////////
   Serial1.begin(9600);
@@ -65,46 +68,59 @@ void setup() {
 
   /////////////////////////////////////////////             RTC SETUP             /////////////////////////////////////
   Wire.begin();
-  if (getDate(__DATE__) && getTime(__TIME__)) {
-    // and configure the RTC with this info
-    if (RTC.write(tm)) {
-      config = true;
+
+  while (!rtcInitFlag) {
+    if (getDate(__DATE__) && getTime(__TIME__)) {
+      // and configure the RTC with this info
+      if (RTC.write(tm)) {
+        rtcInitFlag = true;
+      }
+    }
+
+    setSyncProvider(RTC.get);   // the function to get the time from the RTC
+    if (timeStatus() != timeSet) {
+      Serial.println(F("Unable to sync with the RTC"));
+      //TODO set from gsm
+      rtcInitFlag = false;
+    }
+    else {
+      rtcInitFlag = true;
+      Serial.println(F("RTC has set the system time"));
     }
   }
 
-  setSyncProvider(RTC.get);   // the function to get the time from the RTC
-  if (timeStatus() != timeSet) {
-    Serial.println(F("Unable to sync with the RTC"));
-    //TODO set from gsm
-  }
-  else {
-    Serial.println(F("RTC has set the system time"));
-  } 
+
+
+
 
   ///////////////////////////////////////////   GSM SETUP    ///////////////////////////////////////////////
- //// check GSM3_NetworkStatus_t GSM3ShieldV1AccessProvider::begin for gsm network attempts
- //// add this 
-//     unsigned loopCnt = 20;
-//     theGSM3ShieldV1ModemCore.gss.begin(9600);
-//  // Launch modem configuration commands
-//     ModemConfiguration(pin);
-//  // If synchronous, wait till ModemConfiguration is over
-//    if(synchronous)
-//    {
-//    // if we shorten this delay, the command fails
-//    while(ready()==0 && loopCnt--) 
-//    {delay(1000); 
-//    Serial.println("gsm.begin() waiting for ready");
-//    Serial.print("LoopCounter");
-//    Serial.println(loopCnt);
-//    }
-//    }
- 
+  //// check GSM3_NetworkStatus_t GSM3ShieldV1AccessProvider::begin for gsm network attempts
+  //// add this
+  //     unsigned loopCnt = 20;
+  //     theGSM3ShieldV1ModemCore.gss.begin(9600);
+  //  // Launch modem configuration commands
+  //     ModemConfiguration(pin);
+  //  // If synchronous, wait till ModemConfiguration is over
+  //    if(synchronous)
+  //    {
+  //    // if we shorten this delay, the command fails
+  //    while(ready()==0 && loopCnt--)
+  //    {delay(1000);
+  //    Serial.println("gsm.begin() waiting for ready");
+  //    Serial.print("LoopCounter");
+  //    Serial.println(loopCnt);
+  //    }
+  //    }
+
   // Start GSM shield
-  if (gsmInit()) {
-    Serial.println(F("GSM initialized"));
-  } else {
-    Serial.println(F("GSM NOT initialized"));
+  if (rtcInitFlag) {
+//    gsmInitFlag = gsmInit();
+    gsmInitFlag = false;
+    if (gsmInitFlag) {
+      Serial.println(F("GSM initialized"));
+    } else {
+      Serial.println(F("GSM NOT initialized"));
+    }
   }
 
 
@@ -115,8 +131,9 @@ void setup() {
   //Timeout connection for server 30sec
   int timeout = 30000;
   unsigned long currentTime = millis();
+  unsigned countInitDataAttempts = 0;
 
-  while (true)
+  while (gsmInitFlag && countInitDataAttempts < gsmInitDataAttempts && !gsmInitDataFlag)
   {
     client.stop();
     if (connect())
@@ -129,13 +146,11 @@ void setup() {
         //TODO set flag for sim not initialized
         break;
       }
-
       sendRequest(resource);
       if (skipResponseHeaders())
       {
         char response[MAX_CONTENT_SIZE];
         readReponseContent(response, sizeof(response));
-
         if (parseSetupData(response, &alarmData)) {
           //////  Print Response Data  ////////////////////////
           printUserData(&alarmData);
@@ -144,6 +159,7 @@ void setup() {
           onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
           client.stop();
           Serial.println(F("Disconnect"));
+          gsmInitDataFlag = true;
           break;
         }
       }
@@ -151,10 +167,20 @@ void setup() {
     else
     {
       Serial.println("Connection failed!");
+      gsmInitDataFlag = false;
       //TODO msg to lcd - connection on server failed
     }
+    countInitDataAttempts++;
   }
 
+  if (!gsmInitDataFlag) {
+    //set on alarm every week for 30 minutes
+    errorWeeklyIrrigation = true;
+    devicesNum = 3;
+    //
+  } else {
+    errorWeeklyIrrigation = false;
+  }
   for (int i = 0; i < devicesNum; i++) {
     enddevices[i].measureflag = false;
     enddevices[i].wateringflag = false;
@@ -163,7 +189,6 @@ void setup() {
     }
     enddevices[i].valvePin = minpinNumber + i;
   }
-
   previousMillis = millis();
   userRequestAlgorithmMillis = millis();
 }
@@ -172,99 +197,106 @@ void setup() {
 void loop() {
   Alarm.delay(1000);
   printTime();
-
-  unsigned long currentMillis = millis();
-  //Check if the time is in auto irrigation algorithm
-  if (!checkAutomaticWaterTime()) {
-    Serial.println("User Time");
-    ///---------- User Request to embedded
-    if (currentMillis - previousMillis >= userRequestInterval) { //CHECK FOR USER request
-      //get request from server per 5minutes
-      previousMillis = currentMillis;
-      if (connect()) {
-        const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41";
-        sendRequest(resource);
-        if (skipResponseHeaders())
-        {
-          char response[MAX_CONTENT_SIZE];
-          readReponseContent(response, sizeof(response));
-
-          if (parseEndDevicesData(response)) {
-            if (deviceFlags[0].measurement) {
-              for (int i = 0; i < devicesNum; i++) {
-                DeviceStart(enddevices[i].zigbeeaddress, i);  //WAKE UP & Take measures (BY USER REQUEST)
-              }
-              sendMeasuresToServer();
-            }
-
-            Serial.println(F("Disconnect"));
-          }
-          client.stop();
-        }
-      }
-    }
-
-    unsigned long currentTime = millis();
-    if (currentTime - userRequestAlgorithmMillis >= userRequestAlgorithmInterval) {
-      userRequestAlgorithmMillis = currentTime;
-      if (connect()) {
-        const char* resource = "/embedded/setup?identifier=40E7CC41";
-        sendRequest(resource);
-
-        if (skipResponseHeaders()) {
-          char response[MAX_CONTENT_SIZE];
-          readReponseContent(response, sizeof(response));
-
-          if (parseSetupData(response, &alarmData)) {
-            //////  Print Response Data  ////////////////////////
-            printUserData(&alarmData);
-
-            //// Set Alarm ////
-            onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
-            client.stop();
-            Serial.println(F("Setup Updated"));
-          }
-        }
-      }
-    }
-
-
-    /////////////    check Measurement Irrigation Flags from Server (BY USER REQUEST) //////////////////////////////////////
+  if (errorWeeklyIrrigation) {
     for (int i = 0; i < devicesNum; i++) {
-      if (deviceFlags[i].irrigation) {
-        // END IRRIGATION FROM USER Request/////
-        if (hour() > deviceFlags[i].untilHour || (hour() == deviceFlags[i].untilHour && minute() >= deviceFlags[i].untilMinute) ) {
-          Serial.println("END THE IRRIGATION NOW!!!");
-          digitalWrite(enddevices[i].valvePin, LOW);
-          deviceFlags[i].startIrrigationFlag = false;
-          sendIrrigationToServer(i, getDateTime(deviceFlags[i].fromHour, deviceFlags[i].fromminute));
-          deviceFlags[i].irrigation = false;
-          //TODO set enddevices[i].startDateTime from USER REQUEST from struct measuringWateringFlags (deviceFlags[i].fromhour, deviceFlags[i].fromminute)
-          //TODO set enddevices[i].endDateTime = Current moment & send irrigation times to server
-          continue;
-        }
-
-        if (hour() > deviceFlags[i].fromHour || (hour() == deviceFlags[i].fromHour && minute() >= deviceFlags[i].fromminute) ) {
-          Serial.println("START THE IRRIGATION NOW!!!");
-          digitalWrite(enddevices[i].valvePin, HIGH);
-          deviceFlags[i].startIrrigationFlag = true;
-        }
-      }
-    }
-    //----END of USER Request to Embeeded---/////////
-  } else {
-    Serial.println("Automatic Algorithm Time");
-    for (int i = 0; i < devicesNum; i++) {
-      if (enddevices[i].wateringflag == true) {
+      if (weekday() == 1 && (hour() == 3) && (14 < minute()) && (minute()< 17)) {
+        Serial.println("Error Weekly Irrigation");
+        Serial.print("ValvePin :");
+        Serial.println(enddevices[i].valvePin);
         digitalWrite(enddevices[i].valvePin, HIGH);
       } else {
         digitalWrite(enddevices[i].valvePin, LOW);
-        if (enddevices[i].DtimeIrrigation != "") {
-          Serial.print("End of Irrigation");
-          Serial.println(enddevices[i].DtimeIrrigation);
-          //TDO send data to server for automatic watering
-          sendIrrigationToServer(i, enddevices[i].DtimeIrrigation);
-          enddevices[i].DtimeIrrigation = "";
+      }
+    }
+    Serial.println(weekday());
+    //check date time and start irrigation
+  } else {
+    unsigned long currentMillis = millis();
+    //Check if the time is in auto irrigation algorithm
+    if (!checkAutomaticWaterTime()) {
+      Serial.println("User Time");
+      ///---------- User Request to embedded
+      if (currentMillis - previousMillis >= userRequestInterval) { //CHECK FOR USER request
+        //get request from server per 5minutes
+        previousMillis = currentMillis;
+        if (connect()) {
+          const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41";
+          sendRequest(resource);
+          if (skipResponseHeaders())
+          {
+            char response[MAX_CONTENT_SIZE];
+            readReponseContent(response, sizeof(response));
+            if (parseEndDevicesData(response)) {
+              if (deviceFlags[0].measurement) {
+                for (int i = 0; i < devicesNum; i++) {
+                  DeviceStart(enddevices[i].zigbeeaddress, i);  //WAKE UP & Take measures (BY USER REQUEST)
+                }
+                sendMeasuresToServer();
+              }
+              Serial.println(F("Disconnect"));
+            }
+            client.stop();
+          }
+        }
+      }
+
+      unsigned long currentTime = millis();
+      if (currentTime - userRequestAlgorithmMillis >= userRequestAlgorithmInterval) {
+        userRequestAlgorithmMillis = currentTime;
+        if (connect()) {
+          const char* resource = "/embedded/setup?identifier=40E7CC41";
+          sendRequest(resource);
+          if (skipResponseHeaders()) {
+            char response[MAX_CONTENT_SIZE];
+            readReponseContent(response, sizeof(response));
+            if (parseSetupData(response, &alarmData)) {
+              //////  Print Response Data  ////////////////////////
+              printUserData(&alarmData);
+              //// Set Alarm ////
+              onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
+              client.stop();
+              Serial.println(F("Setup Updated"));
+            }
+          }
+        }
+      }
+
+      /////////////    check Measurement Irrigation Flags from Server (BY USER REQUEST) //////////////////////////////////////
+      for (int i = 0; i < devicesNum; i++) {
+        if (deviceFlags[i].irrigation) {
+          // END IRRIGATION FROM USER Request/////
+          if (hour() > deviceFlags[i].untilHour || (hour() == deviceFlags[i].untilHour && minute() >= deviceFlags[i].untilMinute) ) {
+            Serial.println("END THE IRRIGATION NOW!!!");
+            digitalWrite(enddevices[i].valvePin, LOW);
+            deviceFlags[i].startIrrigationFlag = false;
+            sendIrrigationToServer(i, getDateTime(deviceFlags[i].fromHour, deviceFlags[i].fromminute));
+            deviceFlags[i].irrigation = false;
+            //TODO set enddevices[i].startDateTime from USER REQUEST from struct measuringWateringFlags (deviceFlags[i].fromhour, deviceFlags[i].fromminute)
+            //TODO set enddevices[i].endDateTime = Current moment & send irrigation times to server
+            continue;
+          }
+          if (hour() > deviceFlags[i].fromHour || (hour() == deviceFlags[i].fromHour && minute() >= deviceFlags[i].fromminute) ) {
+            Serial.println("START THE IRRIGATION NOW!!!");
+            digitalWrite(enddevices[i].valvePin, HIGH);
+            deviceFlags[i].startIrrigationFlag = true;
+          }
+        }
+      }
+      //----END of USER Request to Embeeded---/////////
+    } else {
+      Serial.println("Automatic Algorithm Time");
+      for (int i = 0; i < devicesNum; i++) {
+        if (enddevices[i].wateringflag == true) {
+          digitalWrite(enddevices[i].valvePin, HIGH);
+        } else {
+          digitalWrite(enddevices[i].valvePin, LOW);
+          if (enddevices[i].DtimeIrrigation != "") {
+            Serial.print("End of Irrigation");
+            Serial.println(enddevices[i].DtimeIrrigation);
+            //TDO send data to server for automatic watering
+            sendIrrigationToServer(i, enddevices[i].DtimeIrrigation);
+            enddevices[i].DtimeIrrigation = "";
+          }
         }
       }
     }
@@ -970,7 +1002,7 @@ boolean gsmInit() {
       checkWhile = true;
       gsmInit = false;
       gmsmAttempts++;
-    } 
+    }
   }
   return gsmInit;
 }
