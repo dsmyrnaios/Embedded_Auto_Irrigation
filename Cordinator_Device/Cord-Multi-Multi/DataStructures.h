@@ -79,7 +79,7 @@ const long userRequestInterval          = 120000;   //interval for getting data 
 const long userRequestAlgorithmInterval = 500000;   //interval for getting data for automatic algorithm 12 hours in milliseconds
 const long damageInterval               = 1800000;  //interval for autoamtic watering on damage
 
-bool connectinDownFlag = false;
+
 
 //////////////////////--------------- Keypad shield const values ------------------//////////////////////
 #define btnRIGHT  0
