@@ -16,18 +16,15 @@
 
 /////////////////////////////////   PUBLIC OBJECT INSTANCE    /////////////////////////////////
 //GSM
-GSM gsmAccess(true);
+GSM gsmAccess;
 GSMClient client;
 GPRS gprs;
 GsmData gsmData;
 
-
-
 //XBEE
 XBee xbee = XBee();
 Keypad kpd = Keypad(makeKeymap(keymap), rPins, cPins, Rows, Cols);
-AltSoftSerial Serial7Segment;
-
+const byte s7sAddress = 0x71;
 
 //CLOCK
 tmElements_t tm;
@@ -57,79 +54,49 @@ unsigned gsmInitDataAttempts = 15;
 
 /////////////////////////////////   SETUP    /////////////////////////////////
 void setup() {
-
-
-
   Serial.begin(9600);     //SERIAL CONFIGURATION
-  Serial7Segment.begin(9600); //Talk to the Serial7Segment at 9600 bps
-  Serial7Segment.write('v'); //Reset the display - this forces the cursor to return to the beginning of the display
-
-
+  Wire.begin();
   ///////////////////////////////////////////////           ZIGBEE SETUP                       /////////////////////////
   Serial1.begin(9600);
   xbee.begin(Serial1);
-
+  clearDisplayI2C();
   /////////////////////////////////////////////             RTC SETUP             /////////////////////////////////////
-  Wire.begin();
-
+  printSegmentCodes( 0x70, 0x30, 0x30, 0x31);
   while (!rtcInitFlag) {
+    bool rtcParse = false;
+    bool usbConfig = false;
     if (getDate(__DATE__) && getTime(__TIME__)) {
+      usbConfig = true;
       // and configure the RTC with this info
       if (RTC.write(tm)) {
-        rtcInitFlag = true;
+        rtcParse = true;
       }
     }
-
     setSyncProvider(RTC.get);   // the function to get the time from the RTC
-    if (timeStatus() != timeSet) {
-      Serial.println(F("Unable to sync with the RTC"));
-      //TODO set from gsm
+    if ( rtcParse && usbConfig) {
+      if (timeStatus() != timeSet) {
+        Serial.println(F("Unable to sync with the RTC"));
+        printSegmentCodes(0x45, 0x30, 0x30, 0x31);
+        rtcInitFlag = false;
+      }
+      else {
+        rtcInitFlag = true;
+        Serial.println(F("RTC has set the system time"));
+      }
+    } else {
       rtcInitFlag = false;
-    }
-    else {
-      rtcInitFlag = true;
-      printErrorCodes(0x76, 0x45, 0x30, 0x30, 0x31);
-      Serial.println(F("RTC has set the system time"));
+      printSegmentCodes(0x45, 0x30, 0x30, 0x31);
+      Serial.println(F("RTC failed to  set the system time"));
     }
   }
-
-
-
-
-
-  ///////////////////////////////////////////   GSM SETUP    ///////////////////////////////////////////////
-  //// check GSM3_NetworkStatus_t GSM3ShieldV1AccessProvider::begin for gsm network attempts
-  //// add this
-  //     unsigned loopCnt = 20;
-  //     theGSM3ShieldV1ModemCore.gss.begin(9600);
-  //  // Launch modem configuration commands
-  //     ModemConfiguration(pin);
-  //  // If synchronous, wait till ModemConfiguration is over
-  //    if(synchronous)
-  //    {
-  //    // if we shorten this delay, the command fails
-  //    while(ready()==0 && loopCnt--)
-  //    {delay(1000);
-  //    Serial.println("gsm.begin() waiting for ready");
-  //    Serial.print("LoopCounter");
-  //    Serial.println(loopCnt);
-  //    }
-  //    }
-
-  // Start GSM shield
+  printSegmentCodes(0x70, 0x30, 0x30, 0x32);
+  /////////////////////////////////////////////      Start GSM shield  /////////////////////////////////////////////////////
   if (rtcInitFlag) {
-    gsmInitFlag = gsmInit();
-    //    gsmInitFlag = false;
+    gsmInitFlag = gsmInit();    
     if (gsmInitFlag) {
       Serial.println(F("GSM initialized"));
     } else {
-      printErrorCodes(0x76, 0x45, 0x30, 0x30, 0x32);
-      //      Serial7Segment.write(0x76);  // Clear display command, resets cursor
-      //      Serial7Segment.write(0x45);  // Hex value for 1, will display '1'
-      //      Serial7Segment.write(0x30);   // ASCII value for '2', will display '2'
-      //      Serial7Segment.write(0x30);  // Hex value for 10, will display 'A'
-      //      Serial7Segment.write(0x31);   // ASCII value for 'B', will display 'b'
-
+      printSegmentCodes(0x45, 0x30, 0x30, 0x32);
       Serial.println(F("GSM NOT initialized"));
     }
   }
@@ -189,7 +156,7 @@ void setup() {
     errorWeeklyIrrigation = true;
     devicesNum = 3;
     if (gsmInitFlag) {
-      printErrorCodes(0x76, 0x45, 0x30, 0x30, 0x33);
+      printSegmentCodes(0x45, 0x30, 0x30, 0x33);
     }
     //
   } else {
@@ -977,7 +944,7 @@ boolean gsmInit() {
     Serial.println(gmsmAttempts);
     Serial.println(F("Please enter your PIN!"));
     int pinCounter = 0;
-    Serial7Segment.write(0x76);
+    // Serial7Segment.write(0x76);
     while (checkWhile) {
       char keypressed = kpd.getKey();
       if (keypressed != NO_KEY)
@@ -985,25 +952,25 @@ boolean gsmInit() {
         Serial.println(keypressed);
         PINNUMBER_LOCAL[pinCounter] = keypressed;
         Serial.println((char*)PINNUMBER_LOCAL);
-        switch (pinCounter) {
-          case 0 :
-            Serial7Segment.write(keypressed); // Send the data byte, with value 1
-            break;
-          case 1 :
-            Serial7Segment.write(0x79); // Send the Move Cursor Command
-            Serial7Segment.write(0x01); // Send the data byte, with value 1
-            Serial7Segment.write(keypressed);    // Write a 7, should be displayed on 2nd digit
-            break;
-          case 2 :
-            Serial7Segment.write(0x79); // Send the Move Cursor Command
-            Serial7Segment.write(0x02); // Send the data byte, with value 1
-            Serial7Segment.write(keypressed);    // Write a 7, should be displayed on 2nd digit
-            break;
-          case 3 :
-            Serial7Segment.write(0x79); // Send the Move Cursor Command
-            Serial7Segment.write(0x03); // Send the data byte, with value 1
-            Serial7Segment.write(keypressed);    // Write a 7, should be displayed on 2nd digit
-        }
+        //        switch (pinCounter) {
+        //          case 0 :
+        //            // Serial7Segment.write(keypressed); // Send the data byte, with value 1
+        //            break;
+        //          case 1 :
+        //            //   Serial7Segment.write(0x79); // Send the Move Cursor Command
+        //            //  Serial7Segment.write(0x01); // Send the data byte, with value 1
+        //            //  Serial7Segment.write(keypressed);    // Write a 7, should be displayed on 2nd digit
+        //            break;
+        //          case 2 :
+        //            //  Serial7Segment.write(0x79); // Send the Move Cursor Command
+        //            // Serial7Segment.write(0x02); // Send the data byte, with value 1
+        //            //  Serial7Segment.write(keypressed);    // Write a 7, should be displayed on 2nd digit
+        //            break;
+        //          case 3 :
+        //            //   Serial7Segment.write(0x79); // Send the Move Cursor Command
+        //            //  Serial7Segment.write(0x03); // Send the data byte, with value 1
+        //            //  Serial7Segment.write(keypressed);    // Write a 7, should be displayed on 2nd digit
+        //        }
         pinCounter++;
         if (pinCounter == 4) {
           //char buf[4];
@@ -1015,37 +982,79 @@ boolean gsmInit() {
         }
       }
     }
-    if ((gsmAccess.begin(gsmData.PINNUMBER) == GSM_READY)) {
-      Serial.println("GSM BEGIN");
-      Serial.println(gsmAccess.getStatus());
-      if ((gprs.attachGPRS(gsmData.GPRS_APN, gsmData.GPRS_LOGIN, gsmData.GPRS_PASSWORD) == GPRS_READY)) {
-        Serial.println("attach GPRS");
-        gsmInit = true;
-        break;
-      }
-      gmsmAttempts++;
+
+    Serial.println("I'm in");
+    if ((gsmAccess.begin(gsmData.PINNUMBER) == GSM_READY) & (gprs.attachGPRS(gsmData.GPRS_APN, gsmData.GPRS_LOGIN, gsmData.GPRS_PASSWORD) == GPRS_READY)) {
+      gsmInit = true;
+      break;
+    } else if (gsmAccess.begin(gsmData.PINNUMBER) != GSM_READY) {
+      Serial.println("Wrong Password");
       checkWhile = true;
       gsmInit = false;
+      gmsmAttempts++;
+      char tempString[10] = "22";
+      //Serial7Segment.print(tempString);      
     } else {
+      checkWhile = true;
+      gsmInit = false;
+      gmsmAttempts++;
       Serial.println(F("Not connected"));
       unsigned long currentMillis = millis();
       if (currentMillis - previousMillis >= 1000) {  //delay(1000);
         previousMillis = currentMillis;
       }
-      checkWhile = true;
-      gsmInit = false;
-      gmsmAttempts++;
     }
+//    if ((gsmAccess.begin(gsmData.PINNUMBER) == GSM_READY)) {
+//      Serial.println("GSM BEGIN");
+//      Serial.println(gsmAccess.getStatus());
+//      if ((gprs.attachGPRS(gsmData.GPRS_APN, gsmData.GPRS_LOGIN, gsmData.GPRS_PASSWORD) == GPRS_READY)) {
+//        Serial.println("attach GPRS");
+//        gsmInit = true;
+//        break;
+//      }
+//      gmsmAttempts++;
+//      checkWhile = true;
+//      gsmInit = false;
+//    } else {
+//      Serial.println(F("Not connected"));
+//      unsigned long currentMillis = millis();
+//      if (currentMillis - previousMillis >= 1000) {  //delay(1000);
+//        previousMillis = currentMillis;
+//      }
+//      checkWhile = true;
+//      gsmInit = false;
+//      gmsmAttempts++;
+//    }
   }
   return gsmInit;
 }
-
-void printErrorCodes(byte firstSegm, byte secondSegm, byte thirdSegm, byte fourthSegm, byte fifthSegm ) {
-  Serial7Segment.write(firstSegm);
-  Serial7Segment.write(secondSegm);
-  Serial7Segment.write(thirdSegm);
-  Serial7Segment.write(fourthSegm);
-  Serial7Segment.write(fifthSegm);
+void printSegmentCodes(byte firstSegm, byte secondSegm, byte thirdSegm, byte fourthSegm) {
+  Wire.beginTransmission(s7sAddress);
+  Wire.write(0x76);  // Clear the display
+  Wire.write(firstSegm);
+  Wire.write(secondSegm);
+  Wire.write(thirdSegm);
+  Wire.write(fourthSegm);
+  Wire.endTransmission();
 }
-
+// Send the clear display command (0x76)
+//  This will clear the display and reset the cursor
+void clearDisplayI2C()
+{
+  Wire.beginTransmission(s7sAddress);
+  Wire.write(0x76);  // Clear display command
+  Wire.endTransmission();
+}
+// This custom function works somewhat like a serial.print.
+//  You can send it an array of chars (string) and it'll print
+//  the first 4 characters in the array.
+void s7sSendStringI2C(String toSend)
+{
+  Wire.beginTransmission(s7sAddress);
+  for (int i = 0; i < 4; i++)
+  {
+    Wire.write(toSend[i]);
+  }
+  Wire.endTransmission();
+}
 
