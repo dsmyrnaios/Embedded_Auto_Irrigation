@@ -100,9 +100,7 @@ void setup() {
       Serial.println(F("GSM NOT initialized"));
     }
   }
-
-
-
+  printSegmentCodes(0x70, 0x30, 0x30, 0x33);
   /////////////////    GET ALARM DATA FROM SERVER   //////////////////////////////////
   //If you get a connection, report back via serial:
   //Try to connect to Server
@@ -119,7 +117,7 @@ void setup() {
       //Send request and skipHeaders for parsing the response
       if ((millis() - currentTime) >= timeout) { //30sec timeout
         Serial.println("timeout for server call");
-        printSegmentCodes(0x45, 0x30, 0x30, 0x33);       
+        printSegmentCodes(0x45, 0x30, 0x30, 0x33);
         break;
       }
       sendRequest(resource);
@@ -146,18 +144,18 @@ void setup() {
       Serial.println(F("Connection failed to server ..."));
       Serial.print(F("Attempts to initialization from server :"));
       Serial.println(countInitDataAttempts);
-      gsmInitDataFlag = false;      
+      gsmInitDataFlag = false;
     }
     countInitDataAttempts++;
   }
-
   if (!gsmInitDataFlag) {
     //set on alarm every week for 30 minutes
     errorWeeklyIrrigation = true;
     devicesNum = 3;
-    if (gsmInitFlag) {
-      printSegmentCodes(0x45, 0x30, 0x30, 0x33);
-    }
+    printSegmentCodes(0x45, 0x30, 0x30, 0x35);
+    //    if (gsmInitFlag) {
+    //      printSegmentCodes(0x45, 0x30, 0x30, 0x33);
+    //    }
     //
   } else {
     errorWeeklyIrrigation = false;
@@ -180,24 +178,24 @@ void loop() {
   printTime();
   if (errorWeeklyIrrigation) {
     for (int i = 0; i < devicesNum; i++) {
-      if (weekday() == 1 && (hour() == 3) && (14 < minute()) && (minute() < 17)) {
-        Serial.println("Error Weekly Irrigation");
-        Serial.print("ValvePin :");
+      if (weekday() == 2 && (hour() == 18) && (6 < minute()) && (minute() < 16)) {
+        Serial.println(F("Error Weekly Irrigation"));
+        Serial.print(F("ValvePin :"));
         Serial.println(enddevices[i].valvePin);
         digitalWrite(enddevices[i].valvePin, HIGH);
       } else {
         digitalWrite(enddevices[i].valvePin, LOW);
       }
     }
-    Serial.println(weekday());
-    //check date time and start irrigation
   } else {
     unsigned long currentMillis = millis();
     //Check if the time is in auto irrigation algorithm
     if (!checkAutomaticWaterTime()) {
+      printSegmentCodes(0x70, 0x30, 0x30, 0x34);
       Serial.println("User Time");
       ///---------- User Request to embedded
       if (currentMillis - previousMillis >= userRequestInterval) { //CHECK FOR USER request
+        printSegmentCodes(0x70, 0x30, 0x30, 0x35);
         //get request from server per 5minutes
         previousMillis = currentMillis;
         if (connect()) {
@@ -223,6 +221,7 @@ void loop() {
 
       unsigned long currentTime = millis();
       if (currentTime - userRequestAlgorithmMillis >= userRequestAlgorithmInterval) {
+        printSegmentCodes(0x70, 0x30, 0x30, 0x36);
         userRequestAlgorithmMillis = currentTime;
         if (connect()) {
           const char* resource = "/embedded/setup?identifier=40E7CC41";
@@ -257,6 +256,7 @@ void loop() {
             continue;
           }
           if (hour() > deviceFlags[i].fromHour || (hour() == deviceFlags[i].fromHour && minute() >= deviceFlags[i].fromminute) ) {
+            printSegmentCodes(0x70, 0x30, 0x30, 0x37);
             Serial.println("START THE IRRIGATION NOW!!!");
             digitalWrite(enddevices[i].valvePin, HIGH);
             deviceFlags[i].startIrrigationFlag = true;
@@ -291,12 +291,16 @@ void sendIrrigationToServer(int indx, String dtfrom) {
   root["autoIrrigFromTime"] = dtfrom;
   root["autoIrrigUntilTime"] = getDateTime(hour(), minute());
   root["waterConsumption"] = 0;
-  root["identifier"] = records[indx].zbaddress;
+  Serial.print(F("endDEVICE add"));
+  Serial.println(records[indx].zbaddress);
+  // root["identifier"] = records[indx].zbaddress;
 
-  //  String strAddr(deviceFlags[counter].zbAddress, HEX);
-  //  strAddr.reserve(8);
-  //  strAddr.toUpperCase();
-  //  root["identifier"] = strAddr;
+  String strAddr(deviceFlags[indx].zbAddress, HEX);
+  strAddr.reserve(8);
+  strAddr.toUpperCase();
+  root["identifier"] = strAddr;
+
+
 
   root.prettyPrintTo(Serial);
   if (client.connect(gsmData.server, gsmData.port)) {
@@ -330,14 +334,18 @@ String getDateTime(int hours , int minutes) {
 }
 
 boolean checkAutomaticWaterTime() {
-  Serial.println(F("From Hours"));
+  Serial.println(F("Automated Irrigation Time"));
+  Serial.print(F("From Hours : "));
   Serial.println(alarmData.frHours);
-  Serial.print(F("From Minutes"));
+  Serial.print(F("From Minutes : "));
   Serial.println(alarmData.frMinutes);
+  Serial.print(F("To Hours : "));
+  Serial.println(alarmData.toHours);
+  Serial.print(F("To Minutes : "));
+  Serial.println(alarmData.toMinutes);
   int alarmfromminutes = alarmData.frHours * 60 + alarmData.frMinutes;
   int alarmtominutes = alarmData.toHours * 60 + alarmData.toMinutes;
   int nowTotalminutes = hour() * 60 + minute();
-
   if (nowTotalminutes >= alarmfromminutes) {
     if (nowTotalminutes <= alarmtominutes) { //p.e 11:00 - 15:00 now: 12:00
       return true;
@@ -345,7 +353,6 @@ boolean checkAutomaticWaterTime() {
       if (alarmData.toHours < alarmData.frHours) {
         alarmtominutes = 24 * 60 + alarmData.toHours * 60 + alarmData.toMinutes;
       }
-
       if ((nowTotalminutes >= alarmfromminutes) && (nowTotalminutes <= alarmtominutes)) {
         return true;
       }
@@ -354,12 +361,10 @@ boolean checkAutomaticWaterTime() {
     if (alarmData.toHours < alarmData.frHours) {
       alarmtominutes = 24 * 60 + alarmData.toHours * 60 + alarmData.toMinutes;
     }
-
     if ((nowTotalminutes >= alarmfromminutes) && (nowTotalminutes <= alarmtominutes)) {
       return true;
     }
   }
-
   return false;
 }
 
@@ -405,7 +410,6 @@ bool connect() {
 //////////////////////////////////////////////////////      Send the HTTP GET request to the server    //////////////////////////////////////////////
 void sendRequest(const char* resource) {
   Serial.println(F("Sending Request ......"));
-
   // Make a HTTP request:
   client.print("GET /FarmCloud");
   client.print(resource);
@@ -422,11 +426,9 @@ bool skipResponseHeaders() {
   char endOfHeaders[] = "\r\n\r\n";
   client.setTimeout(HTTP_TIMEOUT);
   bool ok = client.find(endOfHeaders);
-
   if (!ok) {
     Serial.println(F("No response or invalid response!"));
   }
-
   return ok;
 }
 
@@ -440,14 +442,11 @@ void readReponseContent(char* content, size_t maxSize) {
 bool parseEndDevicesData(char* content) {
   DynamicJsonBuffer jsonBuffer;
   JsonArray& root = jsonBuffer.parseArray(content);
-
   root.prettyPrintTo(Serial);
-
   if (!root.success()) {
     Serial.println(F("JSON parsing failed!"));
     return false;
   }
-
   for (int i = 0; i < devicesNum; i++) {
     const char* identifier = root[i]["id"];
     deviceFlags[i].zbAddress = strtoul(identifier, NULL, 16);
@@ -472,14 +471,11 @@ bool parseSetupData(char* content, struct AlarmData * alarmData) {
   // If the memory pool is too big for the stack, use this instead:
   DynamicJsonBuffer jsonBuffer;
   JsonObject& root = jsonBuffer.parseObject(content);
-
   if (!root.success()) {
     Serial.println(F("JSON parsing failed!"));
     return false;
   }
-
   root.prettyPrintTo(Serial);
-
   //TODO must change for enddevices
   // Here were copy the strings we're interested in
   alarmData->frHours    = root["fh"];
@@ -487,20 +483,14 @@ bool parseSetupData(char* content, struct AlarmData * alarmData) {
   alarmData->toHours    = root["th"];
   alarmData->toMinutes  = root["tm"];
   devicesNum = root["num"];
-
   JARRAY_BUFFER_SIZE = devicesNum * 350;
   JSON_BUFFER_SIZE = JARRAY_BUFFER_SIZE + 20;
-
   Serial.print(F("devicesNum = "));
   Serial.println(devicesNum);
-
-  //struct endDevice enddevices[devicesNum];
-
   for (int i = 0; i < devicesNum; i++) {
     const char* idenntifier = root["devices"][i]["id"];
     //enddevices[i].zigbeeCharAddress = strdup(idenntifier);
     enddevices[i].zigbeeaddress = strtoul(idenntifier, NULL, 16);
-
     enddevices[i].minhumidity = root["devices"][i]["minh"];
     enddevices[i].maxhumidity = root["devices"][i]["maxh"];
     enddevices[i].mintemp = root["devices"][i]["mint"];
@@ -508,11 +498,9 @@ bool parseSetupData(char* content, struct AlarmData * alarmData) {
     enddevices[i].measureflag = false;
     enddevices[i].wateringflag = false;
     enddevices[i].valvePin = minpinNumber + i;
-
     ///////////////////////   SOLENOID OUTPUT PINS    ///////////////////////
     pinMode(minpinNumber + i, OUTPUT);
   }
-
   return true;
 }
 
@@ -938,7 +926,7 @@ boolean gsmInit() {
   boolean gsmInit = false;
   boolean gsmPinFlag = true;
   int gsmAttempts = 0;
-  char PINNUMBER_LOCAL[4];  
+  char PINNUMBER_LOCAL[4];
   while (gsmAttempts < 3) {
     String readStringTest;
     Serial.print(F("GSM Attemts : "));
