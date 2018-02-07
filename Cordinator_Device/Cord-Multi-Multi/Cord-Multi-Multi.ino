@@ -246,7 +246,7 @@ void loop() {
         if (deviceFlags[i].irrigation) {
           // END IRRIGATION FROM USER Request/////
           if (hour() > deviceFlags[i].untilHour || (hour() == deviceFlags[i].untilHour && minute() >= deviceFlags[i].untilMinute) ) {
-            Serial.println("END THE IRRIGATION NOW!!!");
+            Serial.println("IRRIGATION OFF!!!");
             digitalWrite(enddevices[i].valvePin, LOW);
             deviceFlags[i].startIrrigationFlag = false;
             sendIrrigationToServer(i, getDateTime(deviceFlags[i].fromHour, deviceFlags[i].fromminute));
@@ -257,7 +257,7 @@ void loop() {
           }
           if (hour() > deviceFlags[i].fromHour || (hour() == deviceFlags[i].fromHour && minute() >= deviceFlags[i].fromminute) ) {
             printSegmentCodes(0x70, 0x30, 0x30, 0x37);
-            Serial.println("START THE IRRIGATION NOW!!!");
+            Serial.println("IRRIGATION ON!!!");
             digitalWrite(enddevices[i].valvePin, HIGH);
             deviceFlags[i].startIrrigationFlag = true;
           }
@@ -291,8 +291,8 @@ void sendIrrigationToServer(int indx, String dtfrom) {
   root["autoIrrigFromTime"] = dtfrom;
   root["autoIrrigUntilTime"] = getDateTime(hour(), minute());
   root["waterConsumption"] = 0;
-  Serial.print(F("endDEVICE add"));
-  Serial.println(records[indx].zbaddress);
+//  Serial.print(F("endDEVICE add"));
+//  Serial.println(records[indx].zbaddress);
   // root["identifier"] = records[indx].zbaddress;
 
   String strAddr(deviceFlags[indx].zbAddress, HEX);
@@ -334,15 +334,15 @@ String getDateTime(int hours , int minutes) {
 }
 
 boolean checkAutomaticWaterTime() {
-  Serial.println(F("Automated Irrigation Time"));
-  Serial.print(F("From Hours : "));
-  Serial.println(alarmData.frHours);
-  Serial.print(F("From Minutes : "));
-  Serial.println(alarmData.frMinutes);
-  Serial.print(F("To Hours : "));
-  Serial.println(alarmData.toHours);
-  Serial.print(F("To Minutes : "));
-  Serial.println(alarmData.toMinutes);
+//  Serial.println(F("Automated Irrigation Time"));
+//  Serial.print(F("From Hours : "));
+//  Serial.println(alarmData.frHours);
+//  Serial.print(F("From Minutes : "));
+//  Serial.println(alarmData.frMinutes);
+//  Serial.print(F("To Hours : "));
+//  Serial.println(alarmData.toHours);
+//  Serial.print(F("To Minutes : "));
+//  Serial.println(alarmData.toMinutes);
   int alarmfromminutes = alarmData.frHours * 60 + alarmData.frMinutes;
   int alarmtominutes = alarmData.toHours * 60 + alarmData.toMinutes;
   int nowTotalminutes = hour() * 60 + minute();
