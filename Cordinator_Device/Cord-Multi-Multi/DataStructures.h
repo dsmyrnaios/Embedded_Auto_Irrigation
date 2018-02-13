@@ -15,6 +15,7 @@ struct record_data {
   float itemp;
   float wtemp;
   int soilm;
+  boolean dataErrorFlag;
 };
 
 // Struct stores USER Data Request TO Embeeded //////////

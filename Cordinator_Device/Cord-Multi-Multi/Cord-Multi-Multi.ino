@@ -21,6 +21,7 @@ GSMClient client;
 GPRS gprs;
 GsmData gsmData;
 
+
 //XBEE
 XBee xbee = XBee();
 Keypad kpd = Keypad(makeKeymap(keymap), rPins, cPins, Rows, Cols);
@@ -35,6 +36,8 @@ AlarmID_t onAlarm ;
 int devicesNum;
 //Send measurements Buffer
 int JARRAY_BUFFER_SIZE, JSON_BUFFER_SIZE;
+int totalContinuedConnectionFailures = 100;
+int continuedConnectionFailuresCounter = 0;
 
 /////////////////////////////////   Public variables    /////////////////////////////////
 //WATERING
@@ -110,6 +113,7 @@ void setup() {
   unsigned countInitDataAttempts = 0;
   while (gsmInitFlag && countInitDataAttempts < gsmInitDataAttempts && !gsmInitDataFlag)
   {
+    client.flush();
     client.stop();
     if (connect())
     {
@@ -131,9 +135,10 @@ void setup() {
           //// Set Alarm //////////////
           //TODO onAlarm
           onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
+          client.flush();
           client.stop();
           Serial.println(F("Disconnect"));
-          gsmInitDataFlag = true;
+          gsmInitDataFlag = true;         ///init end devices to base station
           break;
         }
       }
@@ -198,6 +203,8 @@ void loop() {
         printSegmentCodes(0x70, 0x30, 0x30, 0x35);
         //get request from server per 5minutes
         previousMillis = currentMillis;
+        client.flush();
+        client.stop();
         if (connect()) {
           const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41";
           sendRequest(resource);
@@ -206,6 +213,7 @@ void loop() {
             char response[MAX_CONTENT_SIZE];
             readReponseContent(response, sizeof(response));
             if (parseEndDevicesData(response)) {
+              continuedConnectionFailuresCounter = 0;
               if (deviceFlags[0].measurement) {
                 for (int i = 0; i < devicesNum; i++) {
                   DeviceStart(enddevices[i].zigbeeaddress, i);  //WAKE UP & Take measures (BY USER REQUEST)
@@ -214,8 +222,11 @@ void loop() {
               }
               Serial.println(F("Disconnect"));
             }
+            client.flush();
             client.stop();
           }
+        } else {
+          continuedConnectionFailuresCounter = continuedConnectionFailuresCounter + 1;
         }
       }
 
@@ -223,6 +234,8 @@ void loop() {
       if (currentTime - userRequestAlgorithmMillis >= userRequestAlgorithmInterval) {
         printSegmentCodes(0x70, 0x30, 0x30, 0x36);
         userRequestAlgorithmMillis = currentTime;
+        client.flush();
+        client.stop();
         if (connect()) {
           const char* resource = "/embedded/setup?identifier=40E7CC41";
           sendRequest(resource);
@@ -230,14 +243,19 @@ void loop() {
             char response[MAX_CONTENT_SIZE];
             readReponseContent(response, sizeof(response));
             if (parseSetupData(response, &alarmData)) {
+              continuedConnectionFailuresCounter = 0;
               //////  Print Response Data  ////////////////////////
               printUserData(&alarmData);
               //// Set Alarm ////
               onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
+              client.flush();
+
               client.stop();
-              Serial.println(F("Setup Updated"));
+              Serial.println(F("Automated irrigation time has been changed"));
             }
           }
+        } else {
+          continuedConnectionFailuresCounter = continuedConnectionFailuresCounter + 1;
         }
       }
 
@@ -282,30 +300,30 @@ void loop() {
       }
     }
   }
+  if (continuedConnectionFailuresCounter == totalContinuedConnectionFailures) {
+    errorWeeklyIrrigation = true;
+  }
 }
 
 void sendIrrigationToServer(int indx, String dtfrom) {
   DynamicJsonBuffer jsonBuffer(JSON_BUFFER_SIZE);
-
   JsonObject& root = jsonBuffer.createObject();
   root["autoIrrigFromTime"] = dtfrom;
   root["autoIrrigUntilTime"] = getDateTime(hour(), minute());
   root["waterConsumption"] = 0;
-//  Serial.print(F("endDEVICE add"));
-//  Serial.println(records[indx].zbaddress);
+  //  Serial.print(F("endDEVICE add"));
+  //  Serial.println(records[indx].zbaddress);
   // root["identifier"] = records[indx].zbaddress;
 
   String strAddr(deviceFlags[indx].zbAddress, HEX);
   strAddr.reserve(8);
   strAddr.toUpperCase();
   root["identifier"] = strAddr;
-
-
-
   root.prettyPrintTo(Serial);
+  client.flush();
+  client.stop();
   if (client.connect(gsmData.server, gsmData.port)) {
     Serial.println(F("connected...Sending Post..."));
-
     client.println("POST /FarmCloud/embedded/manualwatering/save/ HTTP/1.0");
     client.println("Host: 78.46.70.93");
     client.println("User-Agent: Arduino/1.0");
@@ -314,15 +332,14 @@ void sendIrrigationToServer(int indx, String dtfrom) {
     client.print("Content-Length: ");
     client.println(root.measureLength());
     client.println();
-
     root.printTo(client);
   } else {
+    printSegmentCodes(0x45, 0x30, 0x30, 0x36);
     Serial.println(F("NOT CONNECTED"));
   }
-
   Serial.println(F("Disconnect"));
+  client.flush();
   client.stop();
-
 
 }
 
@@ -334,15 +351,15 @@ String getDateTime(int hours , int minutes) {
 }
 
 boolean checkAutomaticWaterTime() {
-//  Serial.println(F("Automated Irrigation Time"));
-//  Serial.print(F("From Hours : "));
-//  Serial.println(alarmData.frHours);
-//  Serial.print(F("From Minutes : "));
-//  Serial.println(alarmData.frMinutes);
-//  Serial.print(F("To Hours : "));
-//  Serial.println(alarmData.toHours);
-//  Serial.print(F("To Minutes : "));
-//  Serial.println(alarmData.toMinutes);
+  //  Serial.println(F("Automated Irrigation Time"));
+  //  Serial.print(F("From Hours : "));
+  //  Serial.println(alarmData.frHours);
+  //  Serial.print(F("From Minutes : "));
+  //  Serial.println(alarmData.frMinutes);
+  //  Serial.print(F("To Hours : "));
+  //  Serial.println(alarmData.toHours);
+  //  Serial.print(F("To Minutes : "));
+  //  Serial.println(alarmData.toMinutes);
   int alarmfromminutes = alarmData.frHours * 60 + alarmData.frMinutes;
   int alarmtominutes = alarmData.toHours * 60 + alarmData.toMinutes;
   int nowTotalminutes = hour() * 60 + minute();
@@ -560,7 +577,18 @@ void WakeUpAndTakeMeasures() {
     Serial.print("FROM MINUTES : ");
     Serial.println(frMinutes);
 
-    onAlarm = Alarm.alarmOnce(frHours, frMinutes, 30, WakeUpAndTakeMeasures);
+    //    onAlarm = Alarm.alarmOnce(frHours, frMinutes, 30, WakeUpAndTakeMeasures);
+
+    if (checkIrrigationUntilTime(frHours, frMinutes)) {
+      onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
+      
+      Serial.println(F("Watering but automated algorithm has expired"));
+      for (int i = 0; i < devicesNum; i++) {
+        enddevices[i].wateringflag = false;
+        }      
+    } else {
+      onAlarm = Alarm.alarmOnce(frHours, frMinutes, 30, WakeUpAndTakeMeasures);
+    }
   } else {
     frHours = addhours(2);
     frMinutes = minute();
@@ -661,14 +689,17 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
     sensorsData = ReadEndDeviceData();
 
     if (sensorsData == "M") {
+      records[counter].dataErrorFlag = true;
       return false;
       /// MODEM STATUS
     } else if (sensorsData == "F") { //FAIL
+      records[counter].dataErrorFlag = true;
       return false;
     } else if (sensorsData == "O") { //FAIL
+      records[counter].dataErrorFlag = true;
       return false;
     } else { //We have sample Ladies
-
+      records[counter].dataErrorFlag = false;
       float humidity, itemp, wtemp;
       int soil;
 
@@ -951,6 +982,7 @@ boolean gsmInit() {
         gsmPinFlag = false;
       }
     }
+
     if ((gsmAccess.begin(gsmData.PINNUMBER) == GSM_READY) & (gprs.attachGPRS(gsmData.GPRS_APN, gsmData.GPRS_LOGIN, gsmData.GPRS_PASSWORD) == GPRS_READY)) {
       gsmInit = true;
       gsmPinFlag = false;
@@ -966,6 +998,7 @@ boolean gsmInit() {
       }
     }
   }
+
   return gsmInit;
 }
 void printSegmentCodes(byte firstSegm, byte secondSegm, byte thirdSegm, byte fourthSegm) {
@@ -999,5 +1032,15 @@ void s7sSendStringI2C(String toSend)
     }
   }
   Wire.endTransmission();
+}
+
+boolean restartGsm() {
+  boolean restartFlag = false;
+  gsmAccess.shutdown();
+  if ((gsmAccess.begin(gsmData.PINNUMBER) == GSM_READY) & (gprs.attachGPRS(gsmData.GPRS_APN, gsmData.GPRS_LOGIN, gsmData.GPRS_PASSWORD) == GPRS_READY)) {
+
+    restartFlag = true;
+  }
+  return restartFlag;
 }
 
