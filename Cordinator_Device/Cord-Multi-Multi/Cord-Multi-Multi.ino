@@ -581,11 +581,11 @@ void WakeUpAndTakeMeasures() {
 
     if (checkIrrigationUntilTime(frHours, frMinutes)) {
       onAlarm = Alarm.alarmOnce(alarmData.frHours, alarmData.frMinutes, 0, WakeUpAndTakeMeasures);
-      
+
       Serial.println(F("Watering but automated algorithm has expired"));
       for (int i = 0; i < devicesNum; i++) {
         enddevices[i].wateringflag = false;
-        }      
+      }
     } else {
       onAlarm = Alarm.alarmOnce(frHours, frMinutes, 30, WakeUpAndTakeMeasures);
     }
@@ -618,34 +618,42 @@ void sendMeasuresToServer() {
   JsonArray& endDevices = root.createNestedArray("emList");
 
   for (int i = 0; i < devicesNum; i++) {
-    //TODO change from 3 to size of end devices count
-    for (int j = 0; j < ARRAYSIZE; j++)
-    {
-      JsonObject& nestedroot =  jsonBufferNes.createObject();
 
-      nestedroot["dt"] = records[i].Dtime;
-      nestedroot["zb"] = records[i].zbaddress;
-      //nestedroot["observableProperty"] = results[j];
+    if (!records[i].dataErrorFlag) {
+      for (int j = 0; j < ARRAYSIZE; j++)
+      {
+        JsonObject& nestedroot =  jsonBufferNes.createObject();
 
-      if (j == 0) {           //humidity
-        nestedroot["mv"] =  records[i].Shumidity;
-        nestedroot["oid"] =  1;
-        nestedroot["uid"] = 21;
-      } else if (j == 1) {    //Internal temprature
-        nestedroot["mv"] = records[i].itemp;
-        nestedroot["oid"] =  2;
-        nestedroot["uid"] = 7;
-      } else if (j == 2) {    //External temperature
-        nestedroot["mv"] = records[i].wtemp;
-        nestedroot["oid"] =  3;
-        nestedroot["uid"] = 7;
-      } else { //j=3          //Soil
-        nestedroot["mv"] = records[i].soilm;
-        nestedroot["oid"] =  4;
-        nestedroot["uid"] = 21;
+        nestedroot["dt"] = records[i].Dtime;
+        nestedroot["zb"] = records[i].zbaddress;
+        //nestedroot["observableProperty"] = results[j];
+
+        if (j == 0) {           //humidity
+          nestedroot["mv"] =  records[i].Shumidity;
+          nestedroot["oid"] =  1;
+          nestedroot["uid"] = 21;
+        } else if (j == 1) {    //Internal temprature
+          nestedroot["mv"] = records[i].itemp;
+          nestedroot["oid"] =  2;
+          nestedroot["uid"] = 7;
+        } else if (j == 2) {    //External temperature
+          nestedroot["mv"] = records[i].wtemp;
+          nestedroot["oid"] =  3;
+          nestedroot["uid"] = 7;
+        } else { //j=3          //Soil
+          nestedroot["mv"] = records[i].soilm;
+          nestedroot["oid"] =  4;
+          nestedroot["uid"] = 21;
+        }
+        endDevices.add(nestedroot);
       }
-      endDevices.add(nestedroot);
+
+
+
     }
+
+    //TODO change from 3 to size of end devices count
+
   }
 
   root.prettyPrintTo(Serial);
@@ -682,21 +690,33 @@ boolean DeviceStart(uint32_t destAddress, int counter) {
 
   unsigned long previousMillis = millis();
   if (WakeUpEndDevice(destAddress)) {
-    while (millis() - previousMillis < 5000) {
-      /*wait for 5sec*/
-    }
+    //    while (millis() - previousMillis < 5000) {
+    //      /*wait for 5sec*/
+    //    }
     Serial.println(F("Reading End Device Sensor Data..."));
-    sensorsData = ReadEndDeviceData();
+    sensorsData = ReadEndDeviceData(destAddress);
 
     if (sensorsData == "M") {
       records[counter].dataErrorFlag = true;
+      records[counter].Shumidity = 0;
+      records[counter].itemp = 0;
+      records[counter].wtemp = 0;
+      records[counter].soilm = 0;
       return false;
       /// MODEM STATUS
     } else if (sensorsData == "F") { //FAIL
       records[counter].dataErrorFlag = true;
+      records[counter].Shumidity = 0;
+      records[counter].itemp = 0;
+      records[counter].wtemp = 0;
+      records[counter].soilm = 0;
       return false;
     } else if (sensorsData == "O") { //FAIL
       records[counter].dataErrorFlag = true;
+      records[counter].Shumidity = 0;
+      records[counter].itemp = 0;
+      records[counter].wtemp = 0;
+      records[counter].soilm = 0;
       return false;
     } else { //We have sample Ladies
       records[counter].dataErrorFlag = false;
@@ -807,107 +827,135 @@ boolean WakeUpEndDevice(uint32_t DestAddress) {
 
   // after sending a tx request, we expect a status response
   // wait up to half second for the status response
-  if (xbee.readPacket(500)) {
-    // got a response!
-    //     Serial.print(" ApiID:");
-    //     Serial.println(xbee.getResponse().getApiId());
-    // should be a znet tx status
-    if (xbee.getResponse().getApiId() == ZB_TX_STATUS_RESPONSE) {
-      //          Serial.print("ZB_TX_STATUS_RESPONSE ApiID:");
-      //          Serial.println(xbee.getResponse().getApiId());
-      xbee.getResponse().getZBTxStatusResponse(txStatus);
+  //  if (xbee.readPacket(3000)) {
+  //    // got a response!
+  //         Serial.print(" ApiID:");
+  //         Serial.println(xbee.getResponse().getApiId());
+  //    // should be a znet tx status
+  //    if (xbee.getResponse().getApiId() == ZB_TX_STATUS_RESPONSE) {
+  //                Serial.print("ZB_TX_STATUS_RESPONSE ApiID:");
+  //                Serial.println(xbee.getResponse().getApiId());
+  //      xbee.getResponse().getZBTxStatusResponse(txStatus);
+  //
+  //      // get the delivery status, the fifth byte
+  //      if (txStatus.getDeliveryStatus() == SUCCESS) {
+  //        Serial.println(F("END DEVICE GOT THE MESSAGE"));
+  //        return true;
+  //        //        unsigned long currentMillis = millis();
+  //        //        Serial.print("Send packet data FOR WAKE UP: "); //360 sec
+  //        //        Serial.print(currentMillis - previousMillis); //360 sec
+  //        //        Serial.println(" msec"); //360 sec
+  //      } else {
+  //        // the remote XBee did not receive our packet. is it powered on?
+  //        Serial.println(F("END DEVICE DID NOT GET THE MESSAGE"));
+  //        return false;
+  //      }
+  //    }
+  //  } else if (xbee.getResponse().isError()) {
+  //
+  //    //   Serial.print("ERROR READING PACKET.ERROR CODE:");
+  //    //   Serial.println(xbee.getResponse().getErrorCode());
+  //
+  //    //nss.print("Error reading packet.  Error code: ");
+  //    //nss.println(xbee.getResponse().getErrorCode());
+  //  } else {
+  //    return false;
+  //    // local XBee did not provide a timely TX Status Response -- should not happen
+  //    //  Serial.println("local XBee did not provide a timely TX Status Response -- should not happen");
+  //  }
 
-      // get the delivery status, the fifth byte
-      if (txStatus.getDeliveryStatus() == SUCCESS) {
-        Serial.println(F("END DEVICE GOT THE MESSAGE"));
-        return true;
-        //        unsigned long currentMillis = millis();
-        //        Serial.print("Send packet data FOR WAKE UP: "); //360 sec
-        //        Serial.print(currentMillis - previousMillis); //360 sec
-        //        Serial.println(" msec"); //360 sec
-      } else {
-        // the remote XBee did not receive our packet. is it powered on?
-        Serial.println(F("END DEVICE DID NOT GET THE MESSAGE"));
-        return false;
-      }
-    }
-  } else if (xbee.getResponse().isError()) {
-
-    //   Serial.print("ERROR READING PACKET.ERROR CODE:");
-    //   Serial.println(xbee.getResponse().getErrorCode());
-
-    //nss.print("Error reading packet.  Error code: ");
-    //nss.println(xbee.getResponse().getErrorCode());
-  } else {
-    return false;
-    // local XBee did not provide a timely TX Status Response -- should not happen
-    //  Serial.println("local XBee did not provide a timely TX Status Response -- should not happen");
-  }
+  return true;
 
 }
 
-String ReadEndDeviceData() {
+String ReadEndDeviceData(uint32_t DestAddress) {
   // previousMillis = millis();
   //TODO reserve Sample
   String sample;
+  boolean sampleFlag = false;
   sample.reserve(25);
   ZBRxResponse rx = ZBRxResponse();
   ModemStatusResponse msr = ModemStatusResponse();
 
+
+  // Rx64Response rx64 = Rx64Response();
+  XBeeAddress64 adr64 = XBeeAddress64();
+
+
   //  Serial.println("mphka sthn read end device");
-  xbee.readPacket();
-  if (xbee.getResponse().isAvailable()) {
-    // got something
-    //  Serial.print("ApiID");
-    //  Serial.println(xbee.getResponse().getApiId());
-    if (xbee.getResponse().getApiId() == ZB_RX_RESPONSE) {
-      // got a zb rx packet
-      //     Serial.print("ZB_RX_RESPONSE ApiID");
-      //   Serial.println(xbee.getResponse().getApiId());
+  unsigned long start = millis();
+  const long timeoutZB = 10000;
 
-      // now fill our zb rx class
-      xbee.getResponse().getZBRxResponse(rx);
+  while ((millis() - start) < timeoutZB) {
+    xbee.readPacket();
+    if (xbee.getResponse().isAvailable()) {
+      // got something
+      Serial.print("ApiID");
+      Serial.println(xbee.getResponse().getApiId());
+      if (xbee.getResponse().getApiId() == ZB_RX_RESPONSE) {
+        // got a zb rx packet
+        Serial.print("ZB_RX_RESPONSE ApiID");
+        Serial.println(xbee.getResponse().getApiId());
 
-      if (rx.getOption() == ZB_PACKET_ACKNOWLEDGED) {
-        // the sender got an ACK
-        //     Serial.println("SENDER GOT AN ACK");
+        // now fill our zb rx class
+        xbee.getResponse().getZBRxResponse(rx);
+
+        if (DestAddress == rx.getRemoteAddress64().getLsb() ) {
+//          if (rx.getOption() == ZB_PACKET_ACKNOWLEDGED) {
+//            // the sender got an ACK
+//            //     Serial.println("SENDER GOT AN ACK");
+//          } else {
+//            // we got it (obviously) but sender didn't get an ACK
+//            //     Serial.println("SENDER DID NOT GET AN ACK");
+//          }
+          for (int i = 0; i < rx.getDataLength(); i++) {
+            sample += (char)rx.getData(i);
+          }
+          sampleFlag = true;
+          Serial.println(sample);
+          break;
+        }
+        sampleFlag = false;
+        //        String strAddr(rx.getRemoteAddress64().getLsb(), HEX);
+        //        strAddr.reserve(8);
+        //        strAddr.toUpperCase();
+        //        Serial.println(strAddr);
+      } else if (xbee.getResponse().getApiId() == MODEM_STATUS_RESPONSE) {
+        xbee.getResponse().getModemStatusResponse(msr);
+        sampleFlag = false;
+        // the local XBee sends this response on certain events, like association/dissociation
+        //  Serial.print("MODEM STATUS RESPONSE :");
+        //  Serial.println(xbee.getResponse().getApiId());
+        if (msr.getStatus() == ASSOCIATED) {
+          sampleFlag = false;
+          // yay this is great.  flash led
+          //    Serial.println("ASSOCIATED");
+        } else if (msr.getStatus() == DISASSOCIATED) {
+          sampleFlag = false;
+          // this is awful.. flash led to show our discontent
+          //    Serial.println("DISASSOCIATED");
+        } else {
+          sampleFlag = false;
+          // another status
+          //    Serial.println("NORMAL STATUS");
+        }
+        //sample = "M";
+        sampleFlag = false;
       } else {
-        // we got it (obviously) but sender didn't get an ACK
-        //     Serial.println("SENDER DID NOT GET AN ACK");
+        sampleFlag = false;
+        //sample = "O";
       }
-      for (int i = 0; i < rx.getDataLength(); i++) {
-        sample += (char)rx.getData(i);
-      }
-      Serial.println(sample);
-    } else if (xbee.getResponse().getApiId() == MODEM_STATUS_RESPONSE) {
-      xbee.getResponse().getModemStatusResponse(msr);
-      // the local XBee sends this response on certain events, like association/dissociation
-      //  Serial.print("MODEM STATUS RESPONSE :");
-      //  Serial.println(xbee.getResponse().getApiId());
-      if (msr.getStatus() == ASSOCIATED) {
-        // yay this is great.  flash led
-
-        //    Serial.println("ASSOCIATED");
-
-      } else if (msr.getStatus() == DISASSOCIATED) {
-        // this is awful.. flash led to show our discontent
-        //    Serial.println("DISASSOCIATED");
-      } else {
-        // another status
-        //    Serial.println("NORMAL STATUS");
-      }
-      sample = "M";
-
-    } else {
-
-      sample = "O";
+    } else if (xbee.getResponse().isError()) {
+      //  Serial.println("ERROR READING PACKET");
+      // sample = "F";
+      sampleFlag = false;
     }
-  } else if (xbee.getResponse().isError()) {
-    //  Serial.println("ERROR READING PACKET");
-    sample = "F";
-
   }
-  return  sample;
+  if (sampleFlag) {
+    return sample;
+  } else {
+    return "F";
+  }
 }
 
 void printDateTime() {
@@ -935,7 +983,8 @@ void printTime() {
 // Calculate based on max input size expected for one command
 #define INPUT_SIZE 30
 void splitMeasures(String input) {
-  Serial.println(input);
+//  Serial.println(F("Splitting Measures"));
+//  Serial.println(input);
 
   char buf[INPUT_SIZE];
   input.toCharArray(buf, input.length() + 1);
@@ -951,6 +1000,14 @@ void splitMeasures(String input) {
     pch = strtok (NULL, ",");
     counter++;
   }
+
+
+
+  //  for (int k = 0; k < 4; k++) {
+  //    Serial.println(measuresValues[k]);
+  //  }
+
+
 }
 ////////////// check GSM3ShieldV1AccessProvider.cpp a timeout has been added for the synchronous connection of GPRS/GSM///////////////
 boolean gsmInit() {

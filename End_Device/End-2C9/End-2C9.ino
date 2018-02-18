@@ -243,41 +243,41 @@ void SendMeasures(String Measures) {
 
   // after sending a tx request, we expect a status response
   // wait up to half second for the status response
-  if (xbee.readPacket(500)) {
-    // got a response!
-    //  Serial.print(" ApiID:");
-    //  Serial.println(xbee.getResponse().getApiId());
-    // should be a znet tx status
-    if (xbee.getResponse().getApiId() == ZB_TX_STATUS_RESPONSE) {
-      // Serial.print("ZB_TX_STATUS_RESPONSE ApiID:");
-      //  Serial.println(xbee.getResponse().getApiId());
-      xbee.getResponse().getZBTxStatusResponse(txStatus);
-
-      //  get the delivery status, the fifth byte
-      if (txStatus.getDeliveryStatus() == SUCCESS) {
-        Serial.println("");
-        Serial.println("COORDINATOR GOT THE MESSAGE");
-
-        //        unsigned long currentMillis = millis();
-        //
-        //        Serial.print("Send packet DATA SENSORS: "); //360 sec
-        //        Serial.print(currentMillis - previousMillis); //360 sec
-        //        Serial.println(" msec"); //360 sec
-      } else {
-        // the remote XBee did not receive our packet. is it powered on?
-        Serial.println("COORDINATOR DID NOT GET THE MESSAGE");
-      }
-    }
-  } else if (xbee.getResponse().isError()) {
-    Serial.print("ERROR READING PACKET.ERROR CODE:");
-    Serial.println(xbee.getResponse().getErrorCode());
-
-    //Serial.print("Error reading packet.  Error code: ");
-    //Serial.println(xbee.getResponse().getErrorCode());
-  } else {
-    // local XBee did not provide a timely TX Status Response -- should not happen
-    Serial.println("local XBee did not provide a timely TX Status Response -- should not happen");
-  }
+//  if (xbee.readPacket(500)) {
+//    // got a response!
+//    //  Serial.print(" ApiID:");
+//    //  Serial.println(xbee.getResponse().getApiId());
+//    // should be a znet tx status
+//    if (xbee.getResponse().getApiId() == ZB_TX_STATUS_RESPONSE) {
+//      // Serial.print("ZB_TX_STATUS_RESPONSE ApiID:");
+//      //  Serial.println(xbee.getResponse().getApiId());
+//      xbee.getResponse().getZBTxStatusResponse(txStatus);
+//
+//      //  get the delivery status, the fifth byte
+//      if (txStatus.getDeliveryStatus() == SUCCESS) {
+//        Serial.println("");
+//        Serial.println("COORDINATOR GOT THE MESSAGE");
+//
+//        //        unsigned long currentMillis = millis();
+//        //
+//        //        Serial.print("Send packet DATA SENSORS: "); //360 sec
+//        //        Serial.print(currentMillis - previousMillis); //360 sec
+//        //        Serial.println(" msec"); //360 sec
+//      } else {
+//        // the remote XBee did not receive our packet. is it powered on?
+//        Serial.println("COORDINATOR DID NOT GET THE MESSAGE");
+//      }
+//    }
+//  } else if (xbee.getResponse().isError()) {
+//    Serial.print("ERROR READING PACKET.ERROR CODE:");
+//    Serial.println(xbee.getResponse().getErrorCode());
+//
+//    //Serial.print("Error reading packet.  Error code: ");
+//    //Serial.println(xbee.getResponse().getErrorCode());
+//  } else {
+//    // local XBee did not provide a timely TX Status Response -- should not happen
+//    Serial.println("local XBee did not provide a timely TX Status Response -- should not happen");
+//  }
 
   delay(500);
 
