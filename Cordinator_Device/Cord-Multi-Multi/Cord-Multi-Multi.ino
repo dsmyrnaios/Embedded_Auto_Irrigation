@@ -117,7 +117,8 @@ void setup() {
     client.stop();
     if (connect())
     {
-      const char* resource = "/embedded/setup?identifier=40E7CC41";
+      const char* resource = "/embedded/station/40E7CC41/setup/";
+//      const char* resource = "/embedded/setup?identifier=40E7CC41";
       //Send request and skipHeaders for parsing the response
       if ((millis() - currentTime) >= timeout) { //30sec timeout
         Serial.println("timeout for server call");
@@ -206,7 +207,8 @@ void loop() {
         client.flush();
         client.stop();
         if (connect()) {
-          const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41";
+          const char* resource = "/embedded/40E7CC41/irrigation";
+//          const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41";
           sendRequest(resource);
           if (skipResponseHeaders())
           {
@@ -237,7 +239,10 @@ void loop() {
         client.flush();
         client.stop();
         if (connect()) {
-          const char* resource = "/embedded/setup?identifier=40E7CC41";
+          
+
+          const char* resource = "/embedded/station/40E7CC41/setup/";
+//          const char* resource = "/embedded/setup?identifier=40E7CC41";
           sendRequest(resource);
           if (skipResponseHeaders()) {
             char response[MAX_CONTENT_SIZE];
@@ -324,7 +329,8 @@ void sendIrrigationToServer(int indx, String dtfrom) {
   client.stop();
   if (client.connect(gsmData.server, gsmData.port)) {
     Serial.println(F("connected...Sending Post..."));
-    client.println("POST /FarmCloud/embedded/manualwatering/save/ HTTP/1.0");
+//    client.println("POST /FarmCloud/embedded/manualwatering/save/ HTTP/1.0");
+    client.println("POST /embedded/irrigation/manual/ HTTP/1.0");
     client.println("Host: 78.46.70.93");
     client.println("User-Agent: Arduino/1.0");
     client.println("Connection: close");
@@ -428,7 +434,7 @@ bool connect() {
 void sendRequest(const char* resource) {
   Serial.println(F("Sending Request ......"));
   // Make a HTTP request:
-  client.print("GET /FarmCloud");
+  client.print("GET ");
   client.print(resource);
   client.println(" HTTP/1.1");
   client.println("Host: 78.46.70.93");
@@ -660,7 +666,8 @@ void sendMeasuresToServer() {
   if (client.connect(gsmData.server, gsmData.port)) {
     Serial.println(F("connected...Sending Post..."));
 
-    client.println("POST /FarmCloud/embedded/savemeasures/ HTTP/1.0");
+//    client.println("POST /FarmCloud/embedded/savemeasures/ HTTP/1.0");
+    client.println("POST /embedded/measures/ HTTP/1.0");
     client.println("Host: 78.46.70.93");
     client.println("User-Agent: Arduino/1.0");
     client.println("Connection: close");

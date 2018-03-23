@@ -36,7 +36,7 @@ struct GsmData {
   char* GPRS_LOGIN     = (char*)"";                      // replace with your GPRS login
   char* GPRS_PASSWORD  = (char*)"";                      // replace with your GPRS password
   char* server         = (char*)"78.46.70.93";           // the base URL
-  int port             = 8080;                           // the port, 80 for HTTP  
+  int port             = 8086;                           // the port, 80 for HTTP  
 };
 
 //typedef union {
