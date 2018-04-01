@@ -330,7 +330,7 @@ void sendIrrigationToServer(int indx, String dtfrom) {
   if (client.connect(gsmData.server, gsmData.port)) {
     Serial.println(F("connected...Sending Post..."));
 //    client.println("POST /FarmCloud/embedded/manualwatering/save/ HTTP/1.0");
-    client.println("POST /embedded/irrigation/manual/ HTTP/1.0");
+    client.println("POST /embedded/irrigation/ HTTP/1.0");
     client.println("Host: 78.46.70.93");
     client.println("User-Agent: Arduino/1.0");
     client.println("Connection: close");
