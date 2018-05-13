@@ -31,7 +31,7 @@ struct measuringWateringFlags {
 };
 
 struct GsmData {
-  char* PINNUMBER      = (char*)"0276";                      //TODO on keypad 8492
+  char* PINNUMBER      = (char*)"5329";                      //TODO on keypad 8492
   char* GPRS_APN       = (char*)"internet.vodafone.gr";  // replace with your GPRS APN
   char* GPRS_LOGIN     = (char*)"";                      // replace with your GPRS login
   char* GPRS_PASSWORD  = (char*)"";                      // replace with your GPRS password
