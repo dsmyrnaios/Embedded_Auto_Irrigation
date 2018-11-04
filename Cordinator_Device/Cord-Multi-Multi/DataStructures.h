@@ -58,7 +58,8 @@ struct endDevice {
   boolean devflag;
   int valvePin;
   char* Dtime[19];
-  String DtimeIrrigation;  
+  String DtimeIrrigation;
+  int irrigationLedPin;  
 };
 
 
@@ -122,3 +123,8 @@ byte cPins[Cols]= {38,39,40}; //Columns 0 to 2
 //#define GPRS_APN       "internet.vodafone.gr" // replace with your GPRS APN
 //#define GPRS_LOGIN     ""    // replace with your GPRS login
 //#define GPRS_PASSWORD  "" // replace with your GPRS password
+
+int latchPin = 5;
+int clockPin = 6;
+int dataPin = 4;
+byte leds = 0;

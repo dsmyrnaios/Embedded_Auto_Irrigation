@@ -53,6 +53,7 @@ bool gsmInitFlag = false;    //GSM flags
 bool gsmInitDataFlag = false; //GSM init data flag
 bool errorWeeklyIrrigation = false;
 unsigned gsmInitDataAttempts = 15;
+int ledIrrigationArray[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 
 /////////////////////////////////   SETUP    /////////////////////////////////
@@ -118,7 +119,7 @@ void setup() {
     if (connect())
     {
       const char* resource = "/embedded/station/40E7CC41/setup/";
-//      const char* resource = "/embedded/setup?identifier=40E7CC41";
+      //      const char* resource = "/embedded/setup?identifier=40E7CC41";
       //Send request and skipHeaders for parsing the response
       if ((millis() - currentTime) >= timeout) { //30sec timeout
         Serial.println("timeout for server call");
@@ -173,7 +174,15 @@ void setup() {
       return;
     }
     enddevices[i].valvePin = minpinNumber + i;
+    enddevices[i].irrigationLedPin = i;
   }
+
+  pinMode(latchPin, OUTPUT);
+  pinMode(dataPin, OUTPUT);
+  pinMode(clockPin, OUTPUT);
+
+  updateShiftRegister();
+
   previousMillis = millis();
   userRequestAlgorithmMillis = millis();
 }
@@ -189,10 +198,13 @@ void loop() {
         Serial.print(F("ValvePin :"));
         Serial.println(enddevices[i].valvePin);
         digitalWrite(enddevices[i].valvePin, HIGH);
+        bitSet(leds, i);
       } else {
         digitalWrite(enddevices[i].valvePin, LOW);
+        bitClear(leds, i);
       }
     }
+    updateShiftRegister();
   } else {
     unsigned long currentMillis = millis();
     //Check if the time is in auto irrigation algorithm
@@ -208,7 +220,7 @@ void loop() {
         client.stop();
         if (connect()) {
           const char* resource = "/embedded/40E7CC41/irrigation";
-//          const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41";
+          //          const char* resource = "/embedded/measureIrrigation?identifier=40E7CC41";
           sendRequest(resource);
           if (skipResponseHeaders())
           {
@@ -239,10 +251,10 @@ void loop() {
         client.flush();
         client.stop();
         if (connect()) {
-          
+
 
           const char* resource = "/embedded/station/40E7CC41/setup/";
-//          const char* resource = "/embedded/setup?identifier=40E7CC41";
+          //          const char* resource = "/embedded/setup?identifier=40E7CC41";
           sendRequest(resource);
           if (skipResponseHeaders()) {
             char response[MAX_CONTENT_SIZE];
@@ -271,6 +283,8 @@ void loop() {
           if (hour() > deviceFlags[i].untilHour || (hour() == deviceFlags[i].untilHour && minute() >= deviceFlags[i].untilMinute) ) {
             Serial.println("IRRIGATION OFF!!!");
             digitalWrite(enddevices[i].valvePin, LOW);
+            ledIrrigationArray[i] = 0;
+            //bitClear(leds, enddevices[i].irrigationLedPin);
             deviceFlags[i].startIrrigationFlag = false;
             sendIrrigationToServer(i, getDateTime(deviceFlags[i].fromHour, deviceFlags[i].fromminute));
             deviceFlags[i].irrigation = false;
@@ -282,18 +296,34 @@ void loop() {
             printSegmentCodes(0x70, 0x30, 0x30, 0x37);
             Serial.println("IRRIGATION ON!!!");
             digitalWrite(enddevices[i].valvePin, HIGH);
+            ledIrrigationArray[i] = 1;
+            //bitSet(leds, enddevices[i].irrigationLedPin);
             deviceFlags[i].startIrrigationFlag = true;
           }
         }
       }
+      for (int j = 0; j < 8; j++) {
+        if (ledIrrigationArray[j] == 1) {
+          bitSet(leds, j);
+        } else {
+          bitClear(leds, j);
+        }
+      }
+      updateShiftRegister();
       //----END of USER Request to Embeeded---/////////
     } else {
       Serial.println("Automatic Algorithm Time");
       for (int i = 0; i < devicesNum; i++) {
         if (enddevices[i].wateringflag == true) {
           digitalWrite(enddevices[i].valvePin, HIGH);
+          bitSet(leds, i);
+          Serial.print("Internal high leds:");
+          Serial.println(leds);
         } else {
           digitalWrite(enddevices[i].valvePin, LOW);
+          Serial.print("Internal low leds:");
+          Serial.println(leds);
+          bitClear(leds, i);
           if (enddevices[i].DtimeIrrigation != "") {
             Serial.print("End of Irrigation");
             Serial.println(enddevices[i].DtimeIrrigation);
@@ -303,6 +333,9 @@ void loop() {
           }
         }
       }
+      Serial.print("led : ");
+      Serial.println(leds);
+      updateShiftRegister();
     }
   }
   if (continuedConnectionFailuresCounter == totalContinuedConnectionFailures) {
@@ -329,7 +362,7 @@ void sendIrrigationToServer(int indx, String dtfrom) {
   client.stop();
   if (client.connect(gsmData.server, gsmData.port)) {
     Serial.println(F("connected...Sending Post..."));
-//    client.println("POST /FarmCloud/embedded/manualwatering/save/ HTTP/1.0");
+    //    client.println("POST /FarmCloud/embedded/manualwatering/save/ HTTP/1.0");
     client.println("POST /embedded/irrigation/ HTTP/1.0");
     client.println("Host: 78.46.70.93");
     client.println("User-Agent: Arduino/1.0");
@@ -666,7 +699,7 @@ void sendMeasuresToServer() {
   if (client.connect(gsmData.server, gsmData.port)) {
     Serial.println(F("connected...Sending Post..."));
 
-//    client.println("POST /FarmCloud/embedded/savemeasures/ HTTP/1.0");
+    //    client.println("POST /FarmCloud/embedded/savemeasures/ HTTP/1.0");
     client.println("POST /embedded/measures/ HTTP/1.0");
     client.println("Host: 78.46.70.93");
     client.println("User-Agent: Arduino/1.0");
@@ -908,13 +941,13 @@ String ReadEndDeviceData(uint32_t DestAddress) {
         xbee.getResponse().getZBRxResponse(rx);
 
         if (DestAddress == rx.getRemoteAddress64().getLsb() ) {
-//          if (rx.getOption() == ZB_PACKET_ACKNOWLEDGED) {
-//            // the sender got an ACK
-//            //     Serial.println("SENDER GOT AN ACK");
-//          } else {
-//            // we got it (obviously) but sender didn't get an ACK
-//            //     Serial.println("SENDER DID NOT GET AN ACK");
-//          }
+          //          if (rx.getOption() == ZB_PACKET_ACKNOWLEDGED) {
+          //            // the sender got an ACK
+          //            //     Serial.println("SENDER GOT AN ACK");
+          //          } else {
+          //            // we got it (obviously) but sender didn't get an ACK
+          //            //     Serial.println("SENDER DID NOT GET AN ACK");
+          //          }
           for (int i = 0; i < rx.getDataLength(); i++) {
             sample += (char)rx.getData(i);
           }
@@ -990,8 +1023,8 @@ void printTime() {
 // Calculate based on max input size expected for one command
 #define INPUT_SIZE 30
 void splitMeasures(String input) {
-//  Serial.println(F("Splitting Measures"));
-//  Serial.println(input);
+  //  Serial.println(F("Splitting Measures"));
+  //  Serial.println(input);
 
   char buf[INPUT_SIZE];
   input.toCharArray(buf, input.length() + 1);
@@ -1096,6 +1129,13 @@ void s7sSendStringI2C(String toSend)
     }
   }
   Wire.endTransmission();
+}
+
+void updateShiftRegister()
+{
+  digitalWrite(latchPin, LOW);
+  shiftOut(dataPin, clockPin, LSBFIRST, leds);
+  digitalWrite(latchPin, HIGH);
 }
 
 boolean restartGsm() {
